@@ -1,6 +1,8 @@
+import io
+import os
 import streamlit as st
 import pandas as pd
-import os
+import matplotlib.pyplot as plt
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from geopy.distance import geodesic
@@ -308,10 +310,73 @@ def find_nearest_shelters_from_coords(
                     if size_col and pd.notna(row.get(size_col)) and str(row.get(size_col)).strip() != ""
                     else "Unknown"
                 ),
+                "lat": float(row["lat"]),
+                "lon": float(row["lon"]),
             }
         )
 
     return out, None
+
+
+def build_offline_tactical_map(
+    user_lat: float,
+    user_lon: float,
+    shelter_lat: float,
+    shelter_lon: float,
+    df_addresses: pd.DataFrame,
+    delta: float = 0.0035,
+) -> io.BytesIO:
+    """
+    Generate a 100% offline static map with matplotlib: street grid from addresses,
+    user location (blue dot), and target shelter (red star). Returns image buffer.
+    """
+    lat_col = "Latitude" if "Latitude" in df_addresses.columns else "lat"
+    lon_col = "Longitude" if "Longitude" in df_addresses.columns else "lon"
+    if lat_col not in df_addresses.columns or lon_col not in df_addresses.columns:
+        buf = io.BytesIO()
+        return buf
+
+    in_bbox = (
+        (df_addresses[lat_col] >= user_lat - delta)
+        & (df_addresses[lat_col] <= user_lat + delta)
+        & (df_addresses[lon_col] >= user_lon - delta)
+        & (df_addresses[lon_col] <= user_lon + delta)
+    )
+    nearby = df_addresses.loc[in_bbox].dropna(subset=[lat_col, lon_col])
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    if not nearby.empty:
+        ax.scatter(
+            nearby[lon_col],
+            nearby[lat_col],
+            c="#E5E5EA",
+            s=2,
+            alpha=0.7,
+        )
+    ax.scatter(
+        user_lon,
+        user_lat,
+        c="#0071e3",
+        s=100,
+        zorder=5,
+        label="You are here",
+    )
+    ax.scatter(
+        shelter_lon,
+        shelter_lat,
+        c="#FF3B30",
+        marker="*",
+        s=200,
+        zorder=5,
+        label="Target Shelter",
+    )
+    ax.legend()
+    plt.axis("off")
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=120, bbox_inches="tight")
+    buf.seek(0)
+    plt.close(fig)
+    return buf
 
 
 # --- 3. Hero Section ---
@@ -414,12 +479,18 @@ if find_clicked:
                         st.success(f"📍 Location identified: {display_address}")
                         st.session_state.shelter_result = data_agent.format_response(display_address, nearest)
                         st.session_state.shelter_result_error = None
+                        st.session_state.shelter_map_user_lat = user_lat
+                        st.session_state.shelter_map_user_lon = user_lon
+                        st.session_state.shelter_map_nearest = nearest
                 except Exception as e:
                     st.session_state.shelter_result_error = str(e)
                     st.session_state.shelter_result = None
 
 if st.session_state.shelter_result_error:
     st.error(st.session_state.shelter_result_error)
+    st.session_state.pop("shelter_map_user_lat", None)
+    st.session_state.pop("shelter_map_user_lon", None)
+    st.session_state.pop("shelter_map_nearest", None)
 
 if st.session_state.shelter_result:
     st.markdown(
@@ -430,6 +501,30 @@ if st.session_state.shelter_result:
     )
     st.write(st.session_state.shelter_result)
     st.markdown("</div>", unsafe_allow_html=True)
+
+    # Offline tactical static map (user + closest shelter on local address grid)
+    map_lat = st.session_state.get("shelter_map_user_lat")
+    map_lon = st.session_state.get("shelter_map_user_lon")
+    map_nearest = st.session_state.get("shelter_map_nearest")
+    if (
+        map_lat is not None
+        and map_lon is not None
+        and map_nearest
+        and isinstance(map_nearest, list)
+        and len(map_nearest) > 0
+        and "lat" in map_nearest[0]
+        and "lon" in map_nearest[0]
+    ):
+        buf = build_offline_tactical_map(
+            map_lat,
+            map_lon,
+            map_nearest[0]["lat"],
+            map_nearest[0]["lon"],
+            df_addresses,
+            delta=0.0035,
+        )
+        if buf.getvalue():
+            st.image(buf, use_container_width=True, caption="Offline Tactical Area Map")
 
 # --- 7. KPI widgets at the very bottom (secondary info) ---
 st.markdown("<br><br>", unsafe_allow_html=True)
