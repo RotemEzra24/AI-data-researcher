@@ -344,7 +344,45 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-user_question = st.text_input("", placeholder="For example: Which fuel type loses value fastest over time? Plot it.")
+
+if "user_question" not in st.session_state:
+    st.session_state.user_question = ""
+
+common_questions = [
+    "Executive summary: top 5 insights and what they mean for the business.",
+    "Show the strongest drivers of price. Provide a plot and quantify impact.",
+    "Which segments are undervalued vs. peers? Explain and visualize.",
+    "Create a clean dashboard: market volume, popular models, and value retention.",
+]
+
+if is_car_data:
+    common_questions = [
+        "Which fuel type loses value fastest over time? Plot depreciation by age.",
+        "What are the top 10 models by value retention? Include a bar chart.",
+        "How does mileage impact price by fuel type? Provide a clear plot.",
+        "Create a clean dashboard: price distribution, retention by model, and demand concentration.",
+        "Identify best investment picks under ₪120,000 with strong retention and low mileage.",
+    ]
+
+q_col, presets_col = st.columns([3, 2], vertical_alignment="top")
+
+with q_col:
+    user_question = st.text_input(
+        "",
+        key="user_question",
+        placeholder="For example: Which fuel type loses value fastest over time? Plot it.",
+    )
+
+with presets_col:
+    selected = st.selectbox(
+        "Common questions",
+        options=["Select a question…"] + common_questions,
+        index=0,
+        label_visibility="collapsed",
+    )
+    if selected != "Select a question…":
+        st.session_state.user_question = selected
+        user_question = st.session_state.user_question
 
 if st.button("Generate AI Insight") and user_question:
     with st.spinner("AI is analyzing the data..."):
