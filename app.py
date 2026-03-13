@@ -175,20 +175,20 @@ def lookup_address_offline(
     df_addresses: pd.DataFrame,
     street_name: str,
     house_number: str,
-) -> tuple[float | None, float | None, str | None]:
+) -> tuple[float | None, float | None, str | None, bool, str | None]:
     """
     Find the row in tlv_addresses matching the given Hebrew street and house number.
-    Returns (latitude, longitude, display_address) or (None, None, None) if not found.
-    Uses columns: t_rechov (street), ms_bayit / t_bayit_veknisa (house), Latitude, Longitude, t_rechov_eng.
+    Returns (lat, lon, display_address, used_fallback, fallback_closest_num).
+    If exact match fails and user gave a house number, fallback: closest numeric house on that street.
     """
     if df_addresses.empty or not street_name or not street_name.strip():
-        return None, None, None
+        return None, None, None, False, None
 
     street_col = "t_rechov"
     lat_col = "Latitude" if "Latitude" in df_addresses.columns else "lat"
     lon_col = "Longitude" if "Longitude" in df_addresses.columns else "lon"
     if lat_col not in df_addresses.columns or lon_col not in df_addresses.columns:
-        return None, None, None
+        return None, None, None, False, None
 
     street_clean = street_name.strip()
     house_clean = house_number.strip() if house_number else ""
@@ -196,7 +196,7 @@ def lookup_address_offline(
     mask_street = df_addresses[street_col].astype(str).str.strip() == street_clean
 
     if house_clean:
-        # Match by ms_bayit (numeric) or t_bayit_veknisa (e.g. 12א)
+        # Exact match: ms_bayit or t_bayit_veknisa
         mask_house = (
             df_addresses["ms_bayit"].astype(str).str.strip() == house_clean
             if "ms_bayit" in df_addresses.columns
@@ -210,25 +210,52 @@ def lookup_address_offline(
     else:
         matches = df_addresses.loc[mask_street]
 
-    if matches.empty:
-        return None, None, None
+    if not matches.empty:
+        row = matches.iloc[0]
+        try:
+            lat = float(row[lat_col])
+            lon = float(row[lon_col])
+        except (TypeError, ValueError):
+            return None, None, None, False, None
+        if "t_rechov_eng" in df_addresses.columns and pd.notna(row.get("t_rechov_eng")):
+            eng_street = str(row["t_rechov_eng"]).strip()
+            num_part = str(row["ms_bayit"]).strip() if house_clean and "ms_bayit" in df_addresses.columns else ""
+            display = f"{eng_street} {num_part}, Tel Aviv".strip()
+        else:
+            display = f"{street_clean} {house_clean}, Tel Aviv".strip()
+        return lat, lon, display, False, None
 
-    row = matches.iloc[0]
+    # No exact match: fallback to closest numeric house number on this street
+    if not house_clean or "ms_bayit" not in df_addresses.columns:
+        return None, None, None, False, None
+    try:
+        user_house_int = int(house_clean)
+    except ValueError:
+        return None, None, None, False, None
+
+    street_only = df_addresses.loc[mask_street].copy()
+    street_only["_ms_bayit_num"] = pd.to_numeric(street_only["ms_bayit"], errors="coerce")
+    street_only = street_only.dropna(subset=["_ms_bayit_num"])
+    if street_only.empty:
+        return None, None, None, False, None
+
+    street_only["_diff"] = (street_only["_ms_bayit_num"] - user_house_int).abs()
+    idx = street_only["_diff"].idxmin()
+    row = street_only.loc[idx]
     try:
         lat = float(row[lat_col])
         lon = float(row[lon_col])
     except (TypeError, ValueError):
-        return None, None, None
+        return None, None, None, False, None
 
-    # Build English-style display address for UI and AI
+    closest_num = int(row["_ms_bayit_num"])
     if "t_rechov_eng" in df_addresses.columns and pd.notna(row.get("t_rechov_eng")):
         eng_street = str(row["t_rechov_eng"]).strip()
-        num_part = str(row["ms_bayit"]).strip() if house_clean and "ms_bayit" in df_addresses.columns else ""
-        display = f"{eng_street} {num_part}, Tel Aviv".strip()
+        display = f"{eng_street} {closest_num}, Tel Aviv".strip()
     else:
-        display = f"{street_clean} {house_clean}, Tel Aviv".strip()
+        display = f"{street_clean} {closest_num}, Tel Aviv".strip()
 
-    return lat, lon, display
+    return lat, lon, display, True, str(closest_num)
 
 
 def pick_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
@@ -368,6 +395,17 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# --- Sidebar: About the Project / Recruiter trap ---
+with st.sidebar:
+    st.title("About the Project")
+    st.subheader("Data & AI for Emergency Response")
+    st.markdown(
+        "Built by Rotem, an Electrical Engineering student. This project merges "
+        "data engineering and AI to create a real-time, offline-capable tactical solution for the home front."
+    )
+    st.markdown("[🔗 LinkedIn](#)")
+    st.markdown("[🐙 GitHub](#)")
+
 if not os.getenv("OPENAI_API_KEY"):
     st.error("OpenAI API Key is missing. Please configure your .env file.")
     st.stop()
@@ -438,7 +476,7 @@ if find_clicked:
     if not selected_street or selected_street == "Select street…":
         st.warning("Please select a street name.")
     else:
-        user_lat, user_lon, display_address = lookup_address_offline(
+        user_lat, user_lon, display_address, used_fallback, fallback_closest_num = lookup_address_offline(
             df_addresses, selected_street, house_number or ""
         )
         if user_lat is None or user_lon is None:
@@ -458,6 +496,10 @@ if find_clicked:
                         st.session_state.shelter_map_user_lat = user_lat
                         st.session_state.shelter_map_user_lon = user_lon
                         st.session_state.shelter_map_nearest = nearest
+                        st.session_state.shelter_used_fallback = used_fallback
+                        st.session_state.shelter_fallback_msg = (
+                            f"{selected_street} {fallback_closest_num}" if used_fallback and fallback_closest_num else None
+                        )
                 except Exception as e:
                     st.session_state.shelter_result_error = str(e)
                     st.session_state.shelter_result = None
@@ -467,8 +509,14 @@ if st.session_state.shelter_result_error:
     st.session_state.pop("shelter_map_user_lat", None)
     st.session_state.pop("shelter_map_user_lon", None)
     st.session_state.pop("shelter_map_nearest", None)
+    st.session_state.pop("shelter_used_fallback", None)
+    st.session_state.pop("shelter_fallback_msg", None)
 
 if st.session_state.shelter_result:
+    if st.session_state.get("shelter_used_fallback") and st.session_state.get("shelter_fallback_msg"):
+        st.warning(
+            f"⚠️ Exact house number not found. Calculating distance from the nearest available address: {st.session_state['shelter_fallback_msg']}"
+        )
     st.markdown(
         """
         <div style='background: white; border-left: 4px solid #0071e3; padding: 20px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); margin-top: 18px;'>
