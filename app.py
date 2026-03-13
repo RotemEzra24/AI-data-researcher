@@ -144,16 +144,6 @@ def load_shelters_data(path: str = "tlv_shelters.csv") -> pd.DataFrame:
     return pd.read_csv(path)
 
 
-@st.cache_data(show_spinner=False)
-def geocode_address(address: str) -> tuple[float, float] | None:
-    geolocator = Nominatim(user_agent="tlv-emergency-shelter-locator")
-    geocode = RateLimiter(geolocator.geocode, min_delay_seconds=1.0, swallow_exceptions=True)
-    loc = geocode(f"{address}, Tel Aviv, Israel")
-    if loc is None:
-        return None
-    return float(loc.latitude), float(loc.longitude)
-
-
 def haversine_m(lat: np.ndarray, lon: np.ndarray, ref_lat: float, ref_lon: float) -> np.ndarray:
     r = 6371000.0
     lat1 = np.radians(lat.astype(float))
@@ -184,12 +174,42 @@ def get_street_names(df: pd.DataFrame) -> list[str]:
     return sorted(values.unique().tolist())
 
 
-def find_nearest_shelter(user_address: str, df: pd.DataFrame) -> tuple[list[dict], str | None]:
-    coords = geocode_address(user_address)
-    if coords is None:
-        return [], "Could not geocode the address. Try a more specific street number in Tel Aviv."
+def find_nearest_shelter(street_name: str, house_number: str | None, df: pd.DataFrame) -> tuple[list[dict], str | None]:
+    """
+    Resolve the user's approximate location using the shelters dataset itself
+    (street + house number), then compute the three closest shelters.
+    """
+    street_col = pick_col(df, ["shem_rechov_eng", "shem_recho"])
+    if street_col is None:
+        return [], "Shelter dataset does not contain a street name column."
 
-    user_lat, user_lon = coords
+    street_mask = df[street_col].astype(str).str.strip().str.casefold() == street_name.strip().casefold()
+    street_df = df[street_mask].dropna(subset=["lat", "lon"]).copy()
+    if street_df.empty:
+        return [], "Could not find shelters on this street in the dataset."
+
+    # Derive a reference point on the street using the closest known house number, if available.
+    ref_lat: float
+    ref_lon: float
+    house_col = pick_col(df, ["ms_bait"])
+    if house_number and house_col and house_col in street_df.columns:
+        try:
+            user_house = float(house_number)
+            street_df["_house"] = pd.to_numeric(street_df[house_col], errors="coerce")
+            street_df = street_df.dropna(subset=["_house"])
+            if street_df.empty:
+                ref_lat = float(street_df["lat"].mean())
+                ref_lon = float(street_df["lon"].mean())
+            else:
+                idx = (street_df["_house"] - user_house).abs().idxmin()
+                ref_lat = float(street_df.loc[idx, "lat"])
+                ref_lon = float(street_df.loc[idx, "lon"])
+        except Exception:
+            ref_lat = float(street_df["lat"].mean())
+            ref_lon = float(street_df["lon"].mean())
+    else:
+        ref_lat = float(street_df["lat"].mean())
+        ref_lon = float(street_df["lon"].mean())
 
     if "lat" not in df.columns or "lon" not in df.columns:
         return [], "Shelter dataset does not include lat/lon. Regenerate tlv_shelters.csv using get_shelters.py."
@@ -201,8 +221,8 @@ def find_nearest_shelter(user_address: str, df: pd.DataFrame) -> tuple[list[dict
     geo_df["distance_m"] = haversine_m(
         geo_df["lat"].to_numpy(),
         geo_df["lon"].to_numpy(),
-        user_lat,
-        user_lon,
+        ref_lat,
+        ref_lon,
     )
     top = geo_df.sort_values("distance_m", ascending=True).head(3)
 
@@ -344,15 +364,15 @@ if find_clicked:
     if not selected_street or selected_street == "Select street…":
         st.warning("Please select a street name.")
     else:
-        user_address = f"{selected_street} {house_number}".strip() if house_number else selected_street.strip()
+        display_address = f"{selected_street} {house_number}".strip() if house_number else selected_street.strip()
         with st.spinner("Finding nearest shelters..."):
             try:
-                nearest, err = find_nearest_shelter(user_address, df)
+                nearest, err = find_nearest_shelter(selected_street, house_number, df)
                 if err:
                     st.session_state.shelter_result_error = err
                     st.session_state.shelter_result = None
                 else:
-                    st.session_state.shelter_result = data_agent.format_response(user_address, nearest)
+                    st.session_state.shelter_result = data_agent.format_response(display_address, nearest)
                     st.session_state.shelter_result_error = None
             except Exception as e:
                 st.session_state.shelter_result_error = str(e)
