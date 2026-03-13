@@ -1,15 +1,17 @@
 import streamlit as st
 import pandas as pd
 import os
-import matplotlib.pyplot as plt
+import math
+import numpy as np
 from dotenv import load_dotenv
-from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
 from langchain_openai import ChatOpenAI
+from geopy.geocoders import Nominatim
+from geopy.extra.rate_limiter import RateLimiter
 
 from prompts import build_agent_prompt
 
 # --- 1. Page Configuration ---
-st.set_page_config(page_title="Data Intelligence", page_icon="", layout="wide")
+st.set_page_config(page_title="Tel Aviv Emergency Shelters", page_icon="", layout="wide")
 load_dotenv()
 
 # --- 2. Premium Styling (CSS) ---
@@ -111,48 +113,156 @@ def premium_widget(title, value, subtitle, gradient="linear-gradient(90deg, #1d1
 
 class DataResearchAgent:
     """
-    Encapsulates the LangChain pandas agent configuration and interaction
-    for this application.
+    The application computes nearest shelters deterministically in Python.
+    The LLM is used only to format the output clearly and urgently.
     """
 
     def __init__(self, df: pd.DataFrame, is_car_data: bool) -> None:
         self.df = df
         self.is_car_data = is_car_data
-        self._agent = self._create_agent(df)
+        self._llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-    @staticmethod
-    def _create_agent(df: pd.DataFrame):
-        llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-        agent = create_pandas_dataframe_agent(
-            llm,
-            df,
-            verbose=True,
-            allow_dangerous_code=True,
-            max_iterations=20,
-            agent_type="openai-tools",
-        )
-        return agent
-
-    def answer_question(self, user_question: str) -> str:
+    def format_response(self, user_input: str, nearest_rows: list[dict]) -> str:
         """
-        Build a rich system prompt and return the agent's textual answer.
-        Plot creation is handled implicitly via the prompt rules.
+        Format the precomputed nearest shelters into a clean, urgent response.
         """
-        agent_prompt = build_agent_prompt(
-            user_question=user_question,
+        system_prompt = build_agent_prompt(
+            user_question=user_input,
             df=self.df,
-            is_car_data=self.is_car_data,
+            is_car_data=False,
         )
-        response = self._agent.invoke(agent_prompt)
-        return response.get("output", "")
+        full_prompt = (
+            f"{system_prompt}\n\n"
+            f"Nearest shelters (precomputed, do not recalculate):\n{nearest_rows}\n"
+        )
+        resp = self._llm.invoke(full_prompt)
+        return getattr(resp, "content", str(resp))
+
+
+@st.cache_data(show_spinner=False)
+def load_shelters_data(path: str = "tlv_shelters.csv") -> pd.DataFrame:
+    return pd.read_csv(path)
+
+
+@st.cache_data(show_spinner=False)
+def geocode_address(address: str) -> tuple[float, float] | None:
+    geolocator = Nominatim(user_agent="tlv-emergency-shelter-locator")
+    geocode = RateLimiter(geolocator.geocode, min_delay_seconds=1.0, swallow_exceptions=True)
+    loc = geocode(f"{address}, Tel Aviv, Israel")
+    if loc is None:
+        return None
+    return float(loc.latitude), float(loc.longitude)
+
+
+def haversine_m(lat: np.ndarray, lon: np.ndarray, ref_lat: float, ref_lon: float) -> np.ndarray:
+    r = 6371000.0
+    lat1 = np.radians(lat.astype(float))
+    lon1 = np.radians(lon.astype(float))
+    lat2 = math.radians(float(ref_lat))
+    lon2 = math.radians(float(ref_lon))
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = np.sin(dlat / 2.0) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2.0) ** 2
+    c = 2.0 * np.arctan2(np.sqrt(a), np.sqrt(1.0 - a))
+    return r * c
+
+
+def pick_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
+    for c in candidates:
+        if c in df.columns:
+            return c
+    return None
+
+
+def find_nearest_shelter(user_address: str, df: pd.DataFrame) -> tuple[list[dict], str | None]:
+    coords = geocode_address(user_address)
+    if coords is None:
+        return [], "Could not geocode the address. Try a more specific street number in Tel Aviv."
+
+    user_lat, user_lon = coords
+
+    if "lat" not in df.columns or "lon" not in df.columns:
+        return [], "Shelter dataset does not include lat/lon. Regenerate tlv_shelters.csv using get_shelters.py."
+
+    geo_df = df.dropna(subset=["lat", "lon"]).copy()
+    if geo_df.empty:
+        return [], "Shelter dataset has no usable coordinates."
+
+    geo_df["distance_m"] = haversine_m(
+        geo_df["lat"].to_numpy(),
+        geo_df["lon"].to_numpy(),
+        user_lat,
+        user_lon,
+    )
+    top = geo_df.sort_values("distance_m", ascending=True).head(3)
+
+    address_col = pick_col(
+        df,
+        [
+            "Full_Address",
+            "FULL_ADDRESS",
+            "full_address",
+            "Address",
+            "address",
+            "כתובת",
+            "LOCATION",
+            "location",
+        ],
+    )
+    accessibility_col = pick_col(
+        df,
+        [
+            "miklat_mungash",  # Tel Aviv shelters: accessible shelter indicator
+            "Accessibility",
+            "accessibility",
+            "נגישות",
+        ],
+    )
+    size_col = pick_col(
+        df,
+        [
+            "shetach_mr",  # Tel Aviv shelters: area in square meters
+            "Size",
+            "size",
+            "CAPACITY",
+            "capacity",
+            "גודל",
+        ],
+    )
+
+    out: list[dict] = []
+    for _, row in top.iterrows():
+        out.append(
+            {
+                "address": (
+                    str(row[address_col])
+                    if address_col and pd.notna(row.get(address_col))
+                    else "Unknown"
+                ),
+                "distance_m": int(round(float(row["distance_m"]))),
+                "accessibility": (
+                    str(row[accessibility_col]).strip()
+                    if accessibility_col and pd.notna(row.get(accessibility_col))
+                    else "Unknown"
+                ),
+                "size": (
+                    f"{float(row[size_col]):,.0f} m²"
+                    if size_col and pd.notna(row.get(size_col)) and str(row.get(size_col)).strip() != ""
+                    else "Unknown"
+                ),
+            }
+        )
+
+    return out, None
+
 
 # --- 3. Hero Section ---
 st.markdown(
     """
     <div class="hero-card">
-        <h1>Data Intelligence.</h1>
+        <h1>Tel Aviv Emergency Shelters.</h1>
         <p class="hero-subtitle">
-            Upload a dataset, surface hidden patterns, and turn raw numbers into a clear narrative.
+            Enter your current location to find the closest shelters immediately.
         </p>
     </div>
     """,
@@ -168,27 +278,19 @@ st.markdown(
     <div class="section-card">
         <div class="section-title">Dataset</div>
         <div class="section-subtitle">
-            By default the app loads a built-in Car Market dataset. You can optionally upload your own CSV to override it.
+            This dashboard is connected to Tel Aviv Municipality emergency shelters data.
         </div>
     """,
     unsafe_allow_html=True
 )
 
-uploaded_file = st.file_uploader("Upload CSV Dataset (optional)", type="csv")
-
-# Load default embedded dataset if no upload is provided
-if uploaded_file is None:
-    default_path = "israel_car_market_prices.csv"
-    if os.path.exists(default_path):
-        df = pd.read_csv(default_path)
-        st.caption("Using built-in sample dataset: Israeli Car Market.")
-    else:
-        st.error("No dataset available. Please upload a CSV file.")
-        st.markdown("</div>", unsafe_allow_html=True)
-        st.stop()
+if os.path.exists("tlv_shelters.csv"):
+    df = load_shelters_data("tlv_shelters.csv")
+    st.success("🟢 Connected: Tel Aviv Emergency Shelters DB")
 else:
-    df = pd.read_csv(uploaded_file)
-    st.caption("Using your uploaded dataset.")
+    st.error("Dataset file missing: tlv_shelters.csv")
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.stop()
 
 st.markdown("</div>", unsafe_allow_html=True)
 st.markdown("<br>", unsafe_allow_html=True)
@@ -205,142 +307,39 @@ st.markdown(
 
 col1, col2, col3 = st.columns(3)
 
-# Check if this is our Car Market dataset
-is_car_data = all(col in df.columns for col in ['Manufacturer', 'Model', 'Current_Price_ILS', 'Original_Price_ILS'])
-
-if is_car_data:
-    # 1. Total Market Value
-    total_market_value = df['Current_Price_ILS'].sum() / 1_000_000  # In Millions
-    with col1:
-        premium_widget(
-            "Market Volume",
-            f"₪{total_market_value:.1f}M",
-            f"Across {len(df):,} listings",
-            "linear-gradient(135deg, #FF9A9E 0%, #FECFEF 99%, #FECFEF 100%)",
-        )
-
-    # 2. Best Selling Car (Most Listings)
-    top_car_series = df.groupby(['Manufacturer', 'Model']).size().idxmax()
-    top_car_name = f"{top_car_series[0]} {top_car_series[1]}"
-    with col2:
-        premium_widget(
-            "Most Popular",
-            top_car_name,
-            "Highest number of listings",
-            "linear-gradient(135deg, #667EEA 0%, #764BA2 100%)",
-        )
-
-    # 3. Best Investment (Highest Value Retention)
-    # Calculate retention: Current Price / Original Price
-    df['Value_Retention'] = df['Current_Price_ILS'] / df['Original_Price_ILS']
-    # Group by model, get the mean retention, find the highest
-    best_investment_series = df.groupby(['Manufacturer', 'Model'])['Value_Retention'].mean().idxmax()
-    best_investment_name = f"{best_investment_series[0]} {best_investment_series[1]}"
-    best_retention_val = df.groupby(['Manufacturer', 'Model'])['Value_Retention'].mean().max() * 100
-
-    with col3:
-        premium_widget(
-            "Best Investment",
-            best_investment_name,
-            f"Retains {best_retention_val:.1f}% of value",
-            "linear-gradient(135deg, #43E97B 0%, #38F9D7 100%)",
-        )
-else:
-    # Generic dataset fallback
-    with col1:
-        premium_widget(
-            "Total Records",
-            f"{len(df):,}",
-            "Rows in dataset",
-            "linear-gradient(135deg, #667EEA 0%, #764BA2 100%)",
-        )
-    with col2:
-        premium_widget(
-            "Features",
-            f"{len(df.columns)}",
-            "Columns in dataset",
-            "linear-gradient(135deg, #FF9A9E 0%, #FECFEF 100%)",
-        )
-    with col3:
-        premium_widget(
-            "File Size",
-            f"{(df.memory_usage(deep=True).sum() / (1024*1024)):.2f} MB",
-            "Memory footprint",
-            "linear-gradient(135deg, #43E97B 0%, #38F9D7 100%)",
-        )
+with col1:
+    premium_widget(
+        "Total Shelters",
+        f"{len(df):,}",
+        "Active public shelters",
+        "linear-gradient(135deg, #FF9A9E 0%, #FECFEF 99%, #FECFEF 100%)",
+    )
+with col2:
+    premium_widget(
+        "Data Points",
+        f"{len(df.columns)}",
+        "Parameters per shelter",
+        "linear-gradient(135deg, #667EEA 0%, #764BA2 100%)",
+    )
+with col3:
+    premium_widget(
+        "City Area",
+        "Tel Aviv",
+        "Official Municipality Data",
+        "linear-gradient(135deg, #43E97B 0%, #38F9D7 100%)",
+    )
 
 st.markdown("</div>", unsafe_allow_html=True)
 
-# --- 5. Visual Overview (Always-On Charts) ---
+# --- 5. AI Agent Initialization ---
+data_agent = DataResearchAgent(df=df, is_car_data=False)
+
+# --- 6. Shelter Locator ---
 st.markdown(
     """
     <div class="section-card">
-        <div class="section-title">Visual overview</div>
-        <div class="section-subtitle">Clean, high-level views so anyone can immediately understand the distribution of your data.</div>
-    """,
-    unsafe_allow_html=True,
-)
-
-if is_car_data:
-    viz_col1, viz_col2 = st.columns(2)
-
-    # Price distribution
-    with viz_col1:
-        fig, ax = plt.subplots(figsize=(5.5, 3.5))
-        ax.hist(df["Current_Price_ILS"], bins=30, color="#4F8EF7", alpha=0.9)
-        ax.set_title("Distribution of current prices (ILS)", fontsize=11)
-        ax.set_xlabel("Current price (ILS)")
-        ax.set_ylabel("Number of listings")
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        fig.tight_layout()
-        st.pyplot(fig, clear_figure=True)
-
-    # Mileage vs price
-    with viz_col2:
-        fig, ax = plt.subplots(figsize=(5.5, 3.5))
-        ax.scatter(
-            df["Mileage_km"],
-            df["Current_Price_ILS"],
-            alpha=0.25,
-            s=10,
-            color="#34C759",
-        )
-        ax.set_title("Mileage vs. current price", fontsize=11)
-        ax.set_xlabel("Mileage (km)")
-        ax.set_ylabel("Current price (ILS)")
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        fig.tight_layout()
-        st.pyplot(fig, clear_figure=True)
-else:
-    # Generic preview and first numeric distribution
-    st.dataframe(df.head(10), use_container_width=True)
-
-    numeric_cols = df.select_dtypes(include="number").columns
-    if len(numeric_cols) > 0:
-        target_col = numeric_cols[0]
-        fig, ax = plt.subplots(figsize=(6, 3.5))
-        ax.hist(df[target_col].dropna(), bins=30, color="#4F8EF7", alpha=0.9)
-        ax.set_title(f"Distribution of {target_col}", fontsize=11)
-        ax.set_xlabel(str(target_col))
-        ax.set_ylabel("Count")
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        fig.tight_layout()
-        st.pyplot(fig, clear_figure=True)
-
-st.markdown("</div>", unsafe_allow_html=True)
-
-# --- 6. AI Agent Initialization ---
-data_agent = DataResearchAgent(df=df, is_car_data=is_car_data)
-
-# --- 7. AI Research Chat ---
-st.markdown(
-    """
-    <div class="section-card">
-        <div class="section-title">Ask the data</div>
-        <div class="section-subtitle">Pose analytical questions or request concise, executive-level summaries.</div>
+        <div class="section-title">Emergency shelter locator</div>
+        <div class="section-subtitle">Enter your current location in Tel Aviv to get the three closest shelters.</div>
     """,
     unsafe_allow_html=True
 )
@@ -348,46 +347,50 @@ st.markdown(
 if "user_question" not in st.session_state:
     st.session_state.user_question = ""
 
+if "preset_address" not in st.session_state:
+    st.session_state.preset_address = "Select a question…"
+
 common_questions = [
-    "Executive summary: top 5 insights and what they mean for the business.",
-    "Show the strongest drivers of price. Provide a plot and quantify impact.",
-    "Which segments are undervalued vs. peers? Explain and visualize.",
-    "Create a clean dashboard: market volume, popular models, and value retention.",
+    "Allenby 30, Tel Aviv",
+    "Dizengoff 50, Tel Aviv",
+    "Ibn Gabirol 100, Tel Aviv",
+    "Rothschild Blvd 1, Tel Aviv",
 ]
 
-if is_car_data:
-    common_questions = [
-        "Which fuel type loses value fastest over time? Plot depreciation by age.",
-        "What are the top 10 models by value retention? Include a bar chart.",
-        "How does mileage impact price by fuel type? Provide a clear plot.",
-        "Create a clean dashboard: price distribution, retention by model, and demand concentration.",
-        "Identify best investment picks under ₪120,000 with strong retention and low mileage.",
-    ]
-
 q_col, presets_col = st.columns([3, 2], vertical_alignment="top")
+
+def _apply_preset_address() -> None:
+    selected = st.session_state.get("preset_address")
+    if selected and selected != "Select a question…":
+        st.session_state["user_question"] = selected
 
 with q_col:
     user_question = st.text_input(
         "",
         key="user_question",
-        placeholder="For example: Which fuel type loses value fastest over time? Plot it.",
+        placeholder="Enter your current location in Tel Aviv (e.g., Allenby 30)...",
     )
 
 with presets_col:
-    selected = st.selectbox(
+    st.selectbox(
         "Common questions",
         options=["Select a question…"] + common_questions,
         index=0,
         label_visibility="collapsed",
+        key="preset_address",
+        on_change=_apply_preset_address,
     )
-    if selected != "Select a question…":
-        st.session_state.user_question = selected
-        user_question = st.session_state.user_question
 
 if st.button("Generate AI Insight") and user_question:
     with st.spinner("AI is analyzing the data..."):
         try:
-            answer_text = data_agent.answer_question(user_question)
+            nearest, err = find_nearest_shelter(user_question, df)
+            if err:
+                st.error(err)
+                st.markdown("</div>", unsafe_allow_html=True)
+                st.stop()
+
+            answer_text = data_agent.format_response(user_question, nearest)
 
             st.markdown(
                 """

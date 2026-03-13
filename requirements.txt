@@ -7,4 +7,6 @@ langchain-experimental
 langchain-openai
 openai
 tabulate
+geopy
+pyproj
 
