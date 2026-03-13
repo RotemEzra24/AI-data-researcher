@@ -174,6 +174,16 @@ def pick_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
     return None
 
 
+def get_street_names(df: pd.DataFrame) -> list[str]:
+    """Extract sorted, unique street names for the selectbox (English preferred for geocoding)."""
+    col = pick_col(df, ["shem_rechov_eng", "shem_recho", "Full_Address"])
+    if col is None:
+        return []
+    values = df[col].dropna().astype(str).str.strip()
+    values = values[values != ""]
+    return sorted(values.unique().tolist())
+
+
 def find_nearest_shelter(user_address: str, df: pd.DataFrame) -> tuple[list[dict], str | None]:
     coords = geocode_address(user_address)
     if coords is None:
@@ -295,16 +305,74 @@ else:
 st.markdown("</div>", unsafe_allow_html=True)
 st.markdown("<br>", unsafe_allow_html=True)
 
-# --- 4. Smart Insights Engine (Business Logic) ---
-st.markdown(
-    """
-    <div class="section-card">
-        <div class="section-title">Market Highlights</div>
-        <div class="section-subtitle">Instantly calculated KPIs based on your dataset.</div>
-    """,
-    unsafe_allow_html=True
-)
+# --- 4. Smart Input Row (Street + House Number) — immediately below badge ---
+street_names = get_street_names(df)
+street_options = ["Select street…"] + (street_names if street_names else [])
 
+input_col1, input_col2, input_col_btn = st.columns([3, 1, 1], vertical_alignment="bottom")
+
+with input_col1:
+    selected_street = st.selectbox(
+        "Street Name",
+        options=street_options,
+        index=0,
+        key="shelter_street",
+    )
+
+with input_col2:
+    house_number = st.text_input(
+        "House Number",
+        value="",
+        placeholder="e.g. 30",
+        key="shelter_house_number",
+    )
+
+with input_col_btn:
+    st.markdown("<br>", unsafe_allow_html=True)  # align button with inputs
+    find_clicked = st.button("Find Closest Shelter", type="primary")
+
+# --- 5. AI Agent (used only when displaying result) ---
+data_agent = DataResearchAgent(df=df, is_car_data=False)
+
+# --- 6. AI Result (shown below smart input; persisted in session state) ---
+if "shelter_result" not in st.session_state:
+    st.session_state.shelter_result = None
+if "shelter_result_error" not in st.session_state:
+    st.session_state.shelter_result_error = None
+
+if find_clicked:
+    if not selected_street or selected_street == "Select street…":
+        st.warning("Please select a street name.")
+    else:
+        user_address = f"{selected_street} {house_number}".strip() if house_number else selected_street.strip()
+        with st.spinner("Finding nearest shelters..."):
+            try:
+                nearest, err = find_nearest_shelter(user_address, df)
+                if err:
+                    st.session_state.shelter_result_error = err
+                    st.session_state.shelter_result = None
+                else:
+                    st.session_state.shelter_result = data_agent.format_response(user_address, nearest)
+                    st.session_state.shelter_result_error = None
+            except Exception as e:
+                st.session_state.shelter_result_error = str(e)
+                st.session_state.shelter_result = None
+
+if st.session_state.shelter_result_error:
+    st.error(st.session_state.shelter_result_error)
+
+if st.session_state.shelter_result:
+    st.markdown(
+        """
+        <div style='background: white; border-left: 4px solid #0071e3; padding: 20px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); margin-top: 18px;'>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.write(st.session_state.shelter_result)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# --- 7. KPI widgets at the very bottom (secondary info) ---
+st.markdown("<br><br>", unsafe_allow_html=True)
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -328,86 +396,3 @@ with col3:
         "Official Municipality Data",
         "linear-gradient(135deg, #43E97B 0%, #38F9D7 100%)",
     )
-
-st.markdown("</div>", unsafe_allow_html=True)
-
-# --- 5. AI Agent Initialization ---
-data_agent = DataResearchAgent(df=df, is_car_data=False)
-
-# --- 6. Shelter Locator ---
-st.markdown(
-    """
-    <div class="section-card">
-        <div class="section-title">Emergency shelter locator</div>
-        <div class="section-subtitle">Enter your current location in Tel Aviv to get the three closest shelters.</div>
-    """,
-    unsafe_allow_html=True
-)
-
-if "user_question" not in st.session_state:
-    st.session_state.user_question = ""
-
-if "preset_address" not in st.session_state:
-    st.session_state.preset_address = "Select a question…"
-
-common_questions = [
-    "Allenby 30, Tel Aviv",
-    "Dizengoff 50, Tel Aviv",
-    "Ibn Gabirol 100, Tel Aviv",
-    "Rothschild Blvd 1, Tel Aviv",
-]
-
-q_col, presets_col = st.columns([3, 2], vertical_alignment="top")
-
-def _apply_preset_address() -> None:
-    selected = st.session_state.get("preset_address")
-    if selected and selected != "Select a question…":
-        st.session_state["user_question"] = selected
-
-with q_col:
-    user_question = st.text_input(
-        "",
-        key="user_question",
-        placeholder="Enter your current location in Tel Aviv (e.g., Allenby 30)...",
-    )
-
-with presets_col:
-    st.selectbox(
-        "Common questions",
-        options=["Select a question…"] + common_questions,
-        index=0,
-        label_visibility="collapsed",
-        key="preset_address",
-        on_change=_apply_preset_address,
-    )
-
-if st.button("Generate AI Insight") and user_question:
-    with st.spinner("AI is analyzing the data..."):
-        try:
-            nearest, err = find_nearest_shelter(user_question, df)
-            if err:
-                st.error(err)
-                st.markdown("</div>", unsafe_allow_html=True)
-                st.stop()
-
-            answer_text = data_agent.format_response(user_question, nearest)
-
-            st.markdown(
-                """
-                <div style='background: white; border-left: 4px solid #0071e3; padding: 20px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); margin-top: 18px;'>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            st.write(answer_text)
-
-            if os.path.exists("temp_plot.png"):
-                st.image("temp_plot.png", use_container_width=True)
-                os.remove("temp_plot.png")
-
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        except Exception as e:
-            st.error(f"Error: {e}")
-
-st.markdown("</div>", unsafe_allow_html=True)
