@@ -164,7 +164,11 @@ def get_streets_from_addresses(path: str = "tlv_addresses.csv") -> list[str]:
     streets = df[street_col].dropna().astype(str).str.strip()
     streets = streets[streets != ""]
     unique = streets.unique().tolist()
-    return sorted(unique)
+    sorted_streets = sorted(
+        unique,
+        key=lambda x: (1, x) if x and x.strip() and x.strip()[0].isdigit() else (0, x),
+    )
+    return sorted_streets
 
 
 def lookup_address_offline(
