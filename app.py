@@ -1,12 +1,9 @@
 import streamlit as st
 import pandas as pd
 import os
-import math
-import numpy as np
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
-from geopy.geocoders import Nominatim
-from geopy.extra.rate_limiter import RateLimiter
+from geopy.distance import geodesic
 
 from prompts import build_agent_prompt
 
@@ -144,17 +141,86 @@ def load_shelters_data(path: str = "tlv_shelters.csv") -> pd.DataFrame:
     return pd.read_csv(path)
 
 
-def haversine_m(lat: np.ndarray, lon: np.ndarray, ref_lat: float, ref_lon: float) -> np.ndarray:
-    r = 6371000.0
-    lat1 = np.radians(lat.astype(float))
-    lon1 = np.radians(lon.astype(float))
-    lat2 = math.radians(float(ref_lat))
-    lon2 = math.radians(float(ref_lon))
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    a = np.sin(dlat / 2.0) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2.0) ** 2
-    c = 2.0 * np.arctan2(np.sqrt(a), np.sqrt(1.0 - a))
-    return r * c
+@st.cache_data(show_spinner=False)
+def load_addresses_data(path: str = "tlv_addresses.csv") -> pd.DataFrame:
+    return pd.read_csv(path)
+
+
+@st.cache_data(show_spinner=False)
+def get_streets_from_addresses(path: str = "tlv_addresses.csv") -> list[str]:
+    """
+    Load tlv_addresses.csv and return a sorted, unique list of Hebrew street names
+    for the selectbox (column t_rechov = street name in Hebrew).
+    """
+    if not os.path.exists(path):
+        return []
+    df = pd.read_csv(path)
+    street_col = "t_rechov" if "t_rechov" in df.columns else None
+    if street_col is None:
+        return []
+    streets = df[street_col].dropna().astype(str).str.strip()
+    streets = streets[streets != ""]
+    return sorted(streets.unique().tolist())
+
+
+def lookup_address_offline(
+    df_addresses: pd.DataFrame,
+    street_name: str,
+    house_number: str,
+) -> tuple[float | None, float | None, str | None]:
+    """
+    Find the row in tlv_addresses matching the given Hebrew street and house number.
+    Returns (latitude, longitude, display_address) or (None, None, None) if not found.
+    Uses columns: t_rechov (street), ms_bayit / t_bayit_veknisa (house), Latitude, Longitude, t_rechov_eng.
+    """
+    if df_addresses.empty or not street_name or not street_name.strip():
+        return None, None, None
+
+    street_col = "t_rechov"
+    lat_col = "Latitude" if "Latitude" in df_addresses.columns else "lat"
+    lon_col = "Longitude" if "Longitude" in df_addresses.columns else "lon"
+    if lat_col not in df_addresses.columns or lon_col not in df_addresses.columns:
+        return None, None, None
+
+    street_clean = street_name.strip()
+    house_clean = house_number.strip() if house_number else ""
+
+    mask_street = df_addresses[street_col].astype(str).str.strip() == street_clean
+
+    if house_clean:
+        # Match by ms_bayit (numeric) or t_bayit_veknisa (e.g. 12א)
+        mask_house = (
+            df_addresses["ms_bayit"].astype(str).str.strip() == house_clean
+            if "ms_bayit" in df_addresses.columns
+            else False
+        )
+        if "t_bayit_veknisa" in df_addresses.columns:
+            mask_house = mask_house | (
+                df_addresses["t_bayit_veknisa"].astype(str).str.strip() == house_clean
+            )
+        matches = df_addresses.loc[mask_street & mask_house]
+    else:
+        matches = df_addresses.loc[mask_street]
+
+    if matches.empty:
+        return None, None, None
+
+    row = matches.iloc[0]
+    try:
+        lat = float(row[lat_col])
+        lon = float(row[lon_col])
+    except (TypeError, ValueError):
+        return None, None, None
+
+    # Build English-style display address for UI and AI
+    if "t_rechov_eng" in df_addresses.columns and pd.notna(row.get("t_rechov_eng")):
+        eng_street = str(row["t_rechov_eng"]).strip()
+        num_part = str(row["ms_bayit"]).strip() if house_clean and "ms_bayit" in df_addresses.columns else ""
+        display = f"{eng_street} {num_part}, Tel Aviv".strip()
+    else:
+        display = f"{street_clean} {house_clean}, Tel Aviv".strip()
+
+    return lat, lon, display
 
 
 def pick_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
@@ -164,53 +230,14 @@ def pick_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
     return None
 
 
-def get_street_names(df: pd.DataFrame) -> list[str]:
-    """Extract sorted, unique street names for the selectbox (English preferred for geocoding)."""
-    col = pick_col(df, ["shem_rechov_eng", "shem_recho", "Full_Address"])
-    if col is None:
-        return []
-    values = df[col].dropna().astype(str).str.strip()
-    values = values[values != ""]
-    return sorted(values.unique().tolist())
-
-
-def find_nearest_shelter(street_name: str, house_number: str | None, df: pd.DataFrame) -> tuple[list[dict], str | None]:
+def find_nearest_shelters_from_coords(
+    user_lat: float,
+    user_lon: float,
+    df: pd.DataFrame,
+) -> tuple[list[dict], str | None]:
     """
-    Resolve the user's approximate location using the shelters dataset itself
-    (street + house number), then compute the three closest shelters.
+    Compute the three closest shelters to the given user coordinates using geodesic distance.
     """
-    street_col = pick_col(df, ["shem_rechov_eng", "shem_recho"])
-    if street_col is None:
-        return [], "Shelter dataset does not contain a street name column."
-
-    street_mask = df[street_col].astype(str).str.strip().str.casefold() == street_name.strip().casefold()
-    street_df = df[street_mask].dropna(subset=["lat", "lon"]).copy()
-    if street_df.empty:
-        return [], "Could not find shelters on this street in the dataset."
-
-    # Derive a reference point on the street using the closest known house number, if available.
-    ref_lat: float
-    ref_lon: float
-    house_col = pick_col(df, ["ms_bait"])
-    if house_number and house_col and house_col in street_df.columns:
-        try:
-            user_house = float(house_number)
-            street_df["_house"] = pd.to_numeric(street_df[house_col], errors="coerce")
-            street_df = street_df.dropna(subset=["_house"])
-            if street_df.empty:
-                ref_lat = float(street_df["lat"].mean())
-                ref_lon = float(street_df["lon"].mean())
-            else:
-                idx = (street_df["_house"] - user_house).abs().idxmin()
-                ref_lat = float(street_df.loc[idx, "lat"])
-                ref_lon = float(street_df.loc[idx, "lon"])
-        except Exception:
-            ref_lat = float(street_df["lat"].mean())
-            ref_lon = float(street_df["lon"].mean())
-    else:
-        ref_lat = float(street_df["lat"].mean())
-        ref_lon = float(street_df["lon"].mean())
-
     if "lat" not in df.columns or "lon" not in df.columns:
         return [], "Shelter dataset does not include lat/lon. Regenerate tlv_shelters.csv using get_shelters.py."
 
@@ -218,11 +245,12 @@ def find_nearest_shelter(street_name: str, house_number: str | None, df: pd.Data
     if geo_df.empty:
         return [], "Shelter dataset has no usable coordinates."
 
-    geo_df["distance_m"] = haversine_m(
-        geo_df["lat"].to_numpy(),
-        geo_df["lon"].to_numpy(),
-        ref_lat,
-        ref_lon,
+    geo_df["distance_m"] = geo_df.apply(
+        lambda r: geodesic(
+            (float(user_lat), float(user_lon)),
+            (float(r["lat"]), float(r["lon"])),
+        ).meters,
+        axis=1,
     )
     top = geo_df.sort_values("distance_m", ascending=True).head(3)
 
@@ -314,19 +342,24 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-if os.path.exists("tlv_shelters.csv"):
-    df = load_shelters_data("tlv_shelters.csv")
-    st.success("🟢 Connected: Tel Aviv Emergency Shelters DB")
-else:
+if not os.path.exists("tlv_shelters.csv"):
     st.error("Dataset file missing: tlv_shelters.csv")
     st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
+if not os.path.exists("tlv_addresses.csv"):
+    st.error("Address database missing: tlv_addresses.csv. Run get_addresses.py to generate it.")
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.stop()
+
+df = load_shelters_data("tlv_shelters.csv")
+df_addresses = load_addresses_data("tlv_addresses.csv")
+st.success("🟢 Connected: Tel Aviv Emergency Shelters DB")
 
 st.markdown("</div>", unsafe_allow_html=True)
 st.markdown("<br>", unsafe_allow_html=True)
 
 # --- 4. Smart Input Row (Street + House Number) — immediately below badge ---
-street_names = get_street_names(df)
+street_names = get_streets_from_addresses()
 street_options = ["Select street…"] + (street_names if street_names else [])
 
 input_col1, input_col2, input_col_btn = st.columns([3, 1, 1], vertical_alignment="bottom")
@@ -364,19 +397,26 @@ if find_clicked:
     if not selected_street or selected_street == "Select street…":
         st.warning("Please select a street name.")
     else:
-        display_address = f"{selected_street} {house_number}".strip() if house_number else selected_street.strip()
-        with st.spinner("Finding nearest shelters..."):
-            try:
-                nearest, err = find_nearest_shelter(selected_street, house_number, df)
-                if err:
-                    st.session_state.shelter_result_error = err
+        user_lat, user_lon, display_address = lookup_address_offline(
+            df_addresses, selected_street, house_number or ""
+        )
+        if user_lat is None or user_lon is None:
+            st.session_state.shelter_result_error = "❌ Address not found in the municipal database. Please verify the house number."
+            st.session_state.shelter_result = None
+        else:
+            with st.spinner("Finding nearest shelters..."):
+                try:
+                    nearest, err = find_nearest_shelters_from_coords(user_lat, user_lon, df)
+                    if err:
+                        st.session_state.shelter_result_error = err
+                        st.session_state.shelter_result = None
+                    else:
+                        st.success(f"📍 Location identified: {display_address}")
+                        st.session_state.shelter_result = data_agent.format_response(display_address, nearest)
+                        st.session_state.shelter_result_error = None
+                except Exception as e:
+                    st.session_state.shelter_result_error = str(e)
                     st.session_state.shelter_result = None
-                else:
-                    st.session_state.shelter_result = data_agent.format_response(display_address, nearest)
-                    st.session_state.shelter_result_error = None
-            except Exception as e:
-                st.session_state.shelter_result_error = str(e)
-                st.session_state.shelter_result = None
 
 if st.session_state.shelter_result_error:
     st.error(st.session_state.shelter_result_error)
