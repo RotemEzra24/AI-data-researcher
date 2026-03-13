@@ -1,8 +1,8 @@
-import io
 import os
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
+import folium
+from streamlit_folium import st_folium
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from geopy.distance import geodesic
@@ -152,7 +152,8 @@ def load_addresses_data(path: str = "tlv_addresses.csv") -> pd.DataFrame:
 def get_streets_from_addresses(path: str = "tlv_addresses.csv") -> list[str]:
     """
     Load tlv_addresses.csv and return a sorted, unique list of Hebrew street names
-    for the selectbox (column t_rechov = street name in Hebrew).
+    for the selectbox (column t_rechov). Sorted alphabetically in Hebrew (standard
+    Python string sort gives correct Hebrew Alef–Tav order via Unicode).
     """
     if not os.path.exists(path):
         return []
@@ -162,7 +163,8 @@ def get_streets_from_addresses(path: str = "tlv_addresses.csv") -> list[str]:
         return []
     streets = df[street_col].dropna().astype(str).str.strip()
     streets = streets[streets != ""]
-    return sorted(streets.unique().tolist())
+    unique = streets.unique().tolist()
+    return sorted(unique)
 
 
 def lookup_address_offline(
@@ -318,65 +320,35 @@ def find_nearest_shelters_from_coords(
     return out, None
 
 
-def build_offline_tactical_map(
+def build_satellite_map(
     user_lat: float,
     user_lon: float,
     shelter_lat: float,
     shelter_lon: float,
-    df_addresses: pd.DataFrame,
-    delta: float = 0.0035,
-) -> io.BytesIO:
+) -> folium.Map:
     """
-    Generate a 100% offline static map with matplotlib: street grid from addresses,
-    user location (blue dot), and target shelter (red star). Returns image buffer.
+    Build an interactive Folium map with Esri World Imagery (satellite) tiles,
+    centered between user and closest shelter, with blue user marker and red shelter marker.
     """
-    lat_col = "Latitude" if "Latitude" in df_addresses.columns else "lat"
-    lon_col = "Longitude" if "Longitude" in df_addresses.columns else "lon"
-    if lat_col not in df_addresses.columns or lon_col not in df_addresses.columns:
-        buf = io.BytesIO()
-        return buf
-
-    in_bbox = (
-        (df_addresses[lat_col] >= user_lat - delta)
-        & (df_addresses[lat_col] <= user_lat + delta)
-        & (df_addresses[lon_col] >= user_lon - delta)
-        & (df_addresses[lon_col] <= user_lon + delta)
+    mid_lat = (user_lat + shelter_lat) / 2.0
+    mid_lon = (user_lon + shelter_lon) / 2.0
+    m = folium.Map(
+        location=[mid_lat, mid_lon],
+        zoom_start=17,
+        tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        attr="Esri",
     )
-    nearby = df_addresses.loc[in_bbox].dropna(subset=[lat_col, lon_col])
-
-    fig, ax = plt.subplots(figsize=(6, 4))
-    if not nearby.empty:
-        ax.scatter(
-            nearby[lon_col],
-            nearby[lat_col],
-            c="#E5E5EA",
-            s=2,
-            alpha=0.7,
-        )
-    ax.scatter(
-        user_lon,
-        user_lat,
-        c="#0071e3",
-        s=100,
-        zorder=5,
-        label="You are here",
-    )
-    ax.scatter(
-        shelter_lon,
-        shelter_lat,
-        c="#FF3B30",
-        marker="*",
-        s=200,
-        zorder=5,
-        label="Target Shelter",
-    )
-    ax.legend()
-    plt.axis("off")
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=120, bbox_inches="tight")
-    buf.seek(0)
-    plt.close(fig)
-    return buf
+    folium.Marker(
+        [user_lat, user_lon],
+        icon=folium.Icon(color="blue", icon="user"),
+        popup="You are here",
+    ).add_to(m)
+    folium.Marker(
+        [shelter_lat, shelter_lon],
+        icon=folium.Icon(color="red", icon="star"),
+        popup="Target Shelter",
+    ).add_to(m)
+    return m
 
 
 # --- 3. Hero Section ---
@@ -502,7 +474,7 @@ if st.session_state.shelter_result:
     st.write(st.session_state.shelter_result)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Offline tactical static map (user + closest shelter on local address grid)
+    # Interactive aerial/satellite map (Folium + Esri World Imagery)
     map_lat = st.session_state.get("shelter_map_user_lat")
     map_lon = st.session_state.get("shelter_map_user_lon")
     map_nearest = st.session_state.get("shelter_map_nearest")
@@ -515,16 +487,13 @@ if st.session_state.shelter_result:
         and "lat" in map_nearest[0]
         and "lon" in map_nearest[0]
     ):
-        buf = build_offline_tactical_map(
+        map_obj = build_satellite_map(
             map_lat,
             map_lon,
             map_nearest[0]["lat"],
             map_nearest[0]["lon"],
-            df_addresses,
-            delta=0.0035,
         )
-        if buf.getvalue():
-            st.image(buf, use_container_width=True, caption="Offline Tactical Area Map")
+        st_folium(map_obj, width=700, height=400)
 
 # --- 7. KPI widgets at the very bottom (secondary info) ---
 st.markdown("<br><br>", unsafe_allow_html=True)

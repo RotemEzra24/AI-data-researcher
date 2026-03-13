@@ -9,4 +9,6 @@ openai
 tabulate
 geopy
 pyproj
+folium
+streamlit-folium
 
