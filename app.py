@@ -1,4 +1,5 @@
 import os
+from urllib.parse import quote
 import streamlit as st
 import pandas as pd
 import folium
@@ -531,7 +532,11 @@ if st.session_state.shelter_result:
             lat = shelter.get("lat")
             lon = shelter.get("lon")
             address = shelter.get("address") or shelter.get("t_ktovet") or "Unknown Address"
-            if lat is not None and lon is not None and user_lat is not None and user_lon is not None:
+            if address and address != "Unknown Address" and user_lat is not None and user_lon is not None:
+                destination_encoded = quote(f"{address}, Tel Aviv, Israel", safe="")
+                gmaps_url = f"https://www.google.com/maps/dir/?api=1&origin={user_lat},{user_lon}&destination={destination_encoded}&travelmode=walking"
+                st.markdown(f"**Option {i+1}:** [📍 Navigate to {address} (Google Maps)]({gmaps_url})")
+            elif lat is not None and lon is not None and user_lat is not None and user_lon is not None:
                 gmaps_url = f"https://www.google.com/maps/dir/?api=1&origin={user_lat},{user_lon}&destination={lat},{lon}&travelmode=walking"
                 st.markdown(f"**Option {i+1}:** [📍 Navigate to {address} (Google Maps)]({gmaps_url})")
     with col_map:
