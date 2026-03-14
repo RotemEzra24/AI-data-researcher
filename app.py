@@ -540,6 +540,17 @@ if st.session_state.shelter_result:
         )
         st.write(st.session_state.shelter_result)
         st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("*Note: GPS might not be accurate due to signal blocking.*")
+        user_lat = st.session_state.get("shelter_map_user_lat")
+        user_lon = st.session_state.get("shelter_map_user_lon")
+        top_3 = st.session_state.get("shelter_map_nearest") or []
+        for i, shelter in enumerate(top_3):
+            lat = shelter.get("lat")
+            lon = shelter.get("lon")
+            address = shelter.get("address") or shelter.get("t_ktovet") or "Unknown Address"
+            if lat is not None and lon is not None and user_lat is not None and user_lon is not None:
+                gmaps_url = f"https://www.google.com/maps/dir/?api=1&origin={user_lat},{user_lon}&destination={lat},{lon}&travelmode=walking"
+                st.markdown(f"**Option {i+1}:** [📍 Navigate to {address} (Google Maps)]({gmaps_url})")
     with col_map:
         map_lat = st.session_state.get("shelter_map_user_lat")
         map_lon = st.session_state.get("shelter_map_user_lon")
