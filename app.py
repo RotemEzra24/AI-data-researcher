@@ -16,11 +16,11 @@ load_dotenv()
 # --- 2. Premium Styling (CSS) ---
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-    
     html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif !important;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
         background: radial-gradient(circle at top, #ffffff 0, #f5f5f7 45%, #eaeaee 100%) !important;
+        letter-spacing: -0.01em !important;
+        line-height: 1.5 !important;
     }
     
     #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
@@ -530,30 +530,31 @@ if st.session_state.shelter_result:
         st.warning(
             f"⚠️ Exact house number not found. Calculating distance from the nearest available address: {st.session_state['shelter_fallback_msg']}"
         )
-    st.markdown(
-        """
-        <div style='background: white; border-left: 4px solid #0071e3; padding: 20px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); margin-top: 18px;'>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.write(st.session_state.shelter_result)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # Interactive aerial/satellite map (Folium + Esri World Imagery)
-    map_lat = st.session_state.get("shelter_map_user_lat")
-    map_lon = st.session_state.get("shelter_map_user_lon")
-    map_nearest = st.session_state.get("shelter_map_nearest")
-    if (
-        map_lat is not None
-        and map_lon is not None
-        and map_nearest
-        and isinstance(map_nearest, list)
-        and len(map_nearest) > 0
-        and "lat" in map_nearest[0]
-        and "lon" in map_nearest[0]
-    ):
-        map_obj = build_satellite_map(map_lat, map_lon, map_nearest)
-        st_folium(map_obj, width=700, height=400)
+    col_text, col_map = st.columns([1, 1], gap="large")
+    with col_text:
+        st.markdown(
+            """
+            <div style='background: white; border-left: 4px solid #0071e3; padding: 20px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); margin-top: 18px;'>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.write(st.session_state.shelter_result)
+        st.markdown("</div>", unsafe_allow_html=True)
+    with col_map:
+        map_lat = st.session_state.get("shelter_map_user_lat")
+        map_lon = st.session_state.get("shelter_map_user_lon")
+        map_nearest = st.session_state.get("shelter_map_nearest")
+        if (
+            map_lat is not None
+            and map_lon is not None
+            and map_nearest
+            and isinstance(map_nearest, list)
+            and len(map_nearest) > 0
+            and "lat" in map_nearest[0]
+            and "lon" in map_nearest[0]
+        ):
+            map_obj = build_satellite_map(map_lat, map_lon, map_nearest)
+            st_folium(map_obj, use_container_width=True, height=400)
 
 # --- 7. KPI widgets at the very bottom (secondary info) ---
 st.markdown("<br><br>", unsafe_allow_html=True)
