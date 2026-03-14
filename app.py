@@ -354,18 +354,15 @@ def find_nearest_shelters_from_coords(
 def build_satellite_map(
     user_lat: float,
     user_lon: float,
-    shelter_lat: float,
-    shelter_lon: float,
+    top_3: list[dict],
 ) -> folium.Map:
     """
-    Build an interactive Folium map with Esri World Imagery (satellite) tiles,
-    centered between user and closest shelter, with blue user marker and red shelter marker.
+    Build an interactive Folium map centered on the user, with a blue user marker
+    and a red marker for each of the 3 closest shelters (shield icon + tooltip).
     """
-    mid_lat = (user_lat + shelter_lat) / 2.0
-    mid_lon = (user_lon + shelter_lon) / 2.0
     m = folium.Map(
-        location=[mid_lat, mid_lon],
-        zoom_start=17,
+        location=[user_lat, user_lon],
+        zoom_start=16,
         tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         attr="Esri",
     )
@@ -374,11 +371,25 @@ def build_satellite_map(
         icon=folium.Icon(color="blue", icon="user"),
         popup="You are here",
     ).add_to(m)
-    folium.Marker(
-        [shelter_lat, shelter_lon],
-        icon=folium.Icon(color="red", icon="star"),
-        popup="Target Shelter",
-    ).add_to(m)
+    for shelter in top_3:
+        lat = shelter.get("lat")
+        lon = shelter.get("lon")
+        if lat is None or lon is None:
+            continue
+        address = (
+            shelter.get("address")
+            or shelter.get("t_ktovet")
+            or shelter.get("ktovet")
+            or shelter.get("Full_Address")
+            or "Shelter"
+        )
+        dist = shelter.get("distance_m", 0)
+        tooltip_text = f"{address} ({int(dist)}m)"
+        folium.Marker(
+            [float(lat), float(lon)],
+            icon=folium.Icon(color="red", icon="shield", prefix="fa"),
+            tooltip=tooltip_text,
+        ).add_to(m)
     return m
 
 
@@ -539,12 +550,7 @@ if st.session_state.shelter_result:
         and "lat" in map_nearest[0]
         and "lon" in map_nearest[0]
     ):
-        map_obj = build_satellite_map(
-            map_lat,
-            map_lon,
-            map_nearest[0]["lat"],
-            map_nearest[0]["lon"],
-        )
+        map_obj = build_satellite_map(map_lat, map_lon, map_nearest)
         st_folium(map_obj, width=700, height=400)
 
 # --- 7. KPI widgets at the very bottom (secondary info) ---
