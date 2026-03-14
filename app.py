@@ -11,7 +11,12 @@ from geopy.distance import geodesic
 from prompts import build_agent_prompt
 
 # --- 1. Page Configuration ---
-st.set_page_config(page_title="Tel Aviv Emergency Shelters", page_icon="", layout="wide")
+st.set_page_config(
+    page_title="Tel Aviv Shelter Locator",
+    page_icon="🛡️",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 load_dotenv()
 
 # --- 2. Premium Styling (CSS) ---
