@@ -15,7 +15,7 @@ st.set_page_config(
     page_title="Tel Aviv Shelter Locator",
     page_icon="🛡️",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 load_dotenv()
 
@@ -412,14 +412,15 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# --- Sidebar: About the Project / Recruiter trap ---
+# --- Sidebar: About the Developer (recruiter exposure) ---
 with st.sidebar:
-    st.title("About the Project")
-    st.subheader("Data & AI for Emergency Response")
+    st.markdown("## 👨‍💻 About the Developer")
+    st.subheader("⚡ Data & AI for Emergency Response")
     st.markdown(
         "Built by Rotem, an Electrical Engineering student. This project merges "
         "data engineering and AI to create a real-time, offline-capable tactical solution for the home front."
     )
+    st.divider()
     st.markdown("[🔗 LinkedIn](#)")
     st.markdown("[🐙 GitHub](#)")
 
