@@ -433,8 +433,7 @@ df_addresses = load_addresses_data("tlv_addresses.csv")
 
 # --- 4. Smart Input Row (Street + House Number) ---
 street_names = get_streets_from_addresses()
-street_options = ["
-…"] + (street_names if street_names else [])
+street_options = ["Select street…"] + (street_names if street_names else [])
 
 input_col1, input_col2, input_col_btn = st.columns([3, 1, 1], vertical_alignment="bottom")
 
