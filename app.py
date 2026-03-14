@@ -421,36 +421,20 @@ if not os.getenv("OPENAI_API_KEY"):
     st.error("OpenAI API Key is missing. Please configure your .env file.")
     st.stop()
 
-st.markdown(
-    """
-    <div class="section-card">
-        <div class="section-title">Dataset</div>
-        <div class="section-subtitle">
-            This dashboard is connected to Tel Aviv Municipality emergency shelters data.
-        </div>
-    """,
-    unsafe_allow_html=True
-)
-
 if not os.path.exists("tlv_shelters.csv"):
     st.error("Dataset file missing: tlv_shelters.csv")
-    st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 if not os.path.exists("tlv_addresses.csv"):
     st.error("Address database missing: tlv_addresses.csv. Run get_addresses.py to generate it.")
-    st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
 df = load_shelters_data("tlv_shelters.csv")
 df_addresses = load_addresses_data("tlv_addresses.csv")
-st.success("🟢 Connected: Tel Aviv Emergency Shelters DB")
 
-st.markdown("</div>", unsafe_allow_html=True)
-st.markdown("<br>", unsafe_allow_html=True)
-
-# --- 4. Smart Input Row (Street + House Number) — immediately below badge ---
+# --- 4. Smart Input Row (Street + House Number) ---
 street_names = get_streets_from_addresses()
-street_options = ["Select street…"] + (street_names if street_names else [])
+street_options = ["
+…"] + (street_names if street_names else [])
 
 input_col1, input_col2, input_col_btn = st.columns([3, 1, 1], vertical_alignment="bottom")
 
@@ -569,26 +553,30 @@ if st.session_state.shelter_result:
 
 # --- 7. KPI widgets at the very bottom (secondary info) ---
 st.markdown("<br><br>", unsafe_allow_html=True)
-col1, col2, col3 = st.columns(3)
+col_kpi1, col_kpi2 = st.columns(2)
 
-with col1:
+with col_kpi1:
     premium_widget(
         "Total Shelters",
         f"{len(df):,}",
         "Active public shelters",
         "linear-gradient(135deg, #FF9A9E 0%, #FECFEF 99%, #FECFEF 100%)",
     )
-with col2:
-    premium_widget(
-        "Data Points",
-        f"{len(df.columns)}",
-        "Parameters per shelter",
-        "linear-gradient(135deg, #667EEA 0%, #764BA2 100%)",
-    )
-with col3:
+with col_kpi2:
     premium_widget(
         "City Area",
         "Tel Aviv",
         "Official Municipality Data",
         "linear-gradient(135deg, #43E97B 0%, #38F9D7 100%)",
     )
+
+# --- 8. Connection status footer ---
+st.markdown(
+    """
+    <div style='text-align: center; color: #86868b; font-size: 12px; margin-top: 2rem;'>
+        <p style='margin: 0;'>Dataset — This dashboard is connected to Tel Aviv Municipality emergency shelters data.</p>
+        <p style='margin: 0.25rem 0 0 0;'>🟢 Connected: Tel Aviv Emergency Shelters DB</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
