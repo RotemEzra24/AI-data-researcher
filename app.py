@@ -412,6 +412,29 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# --- Emergency & System Info expander (below main header) ---
+with st.expander("🛡️ מידע חירום ואמינות המערכת (Emergency & System Info)", expanded=True):
+    col_em, col_dev = st.columns(2)
+    with col_em:
+        st.markdown("#### 📞 מוקדי חירום (Emergency Lines)")
+        st.markdown(
+            "**104** - פיקוד העורף (Home Front Command)<br>**100** - משטרה (Police)<br>**101** - מד\"א (Ambulance)",
+            unsafe_allow_html=True,
+        )
+        st.info(
+            "💡 **Why trust this app?** System operates with a fully offline geocoding fallback to bypass GPS spoofing and network crashes."
+        )
+    with col_dev:
+        st.markdown("#### 👨‍💻 About the Developer")
+        st.write(
+            "Built by Rotem, an Electrical Engineering student and GenAI Data Scientist. This project merges the operational mindset of a Nahal Brigade combat commander with advanced data engineering to create resilient tactical solutions for the home front."
+        )
+        l1, l2 = st.columns(2)
+        with l1:
+            st.markdown("[🔗 LinkedIn](#)")
+        with l2:
+            st.markdown("[🐙 GitHub](#)")
+
 # --- Sidebar: About the Developer (recruiter exposure) ---
 with st.sidebar:
     st.markdown("## 👨‍💻 About the Developer")
