@@ -458,15 +458,15 @@ with input_col1:
     selected_street = st.selectbox(
         "Street Name",
         options=street_options,
-        index=0,
+        index=None,
+        placeholder="e.g., מאיר דיזנגוף",
         key="shelter_street",
     )
 
 with input_col2:
     house_number = st.text_input(
         "House Number",
-        value="",
-        placeholder="e.g. 30",
+        placeholder="e.g., 50",
         key="shelter_house_number",
     )
 
@@ -484,36 +484,38 @@ if "shelter_result_error" not in st.session_state:
     st.session_state.shelter_result_error = None
 
 if find_clicked:
-    if not selected_street or selected_street == "Select street…":
-        st.warning("Please select a street name.")
+    has_street = selected_street is not None and selected_street != "Select street…"
+    has_house = house_number and str(house_number).strip()
+    if not has_street or not has_house:
+        st.warning("Please select a street and enter a house number first.")
+        st.stop()
+    user_lat, user_lon, display_address, used_fallback, fallback_closest_num = lookup_address_offline(
+        df_addresses, selected_street, house_number or ""
+    )
+    if user_lat is None or user_lon is None:
+        st.session_state.shelter_result_error = "❌ Address not found in the municipal database. Please verify the house number."
+        st.session_state.shelter_result = None
     else:
-        user_lat, user_lon, display_address, used_fallback, fallback_closest_num = lookup_address_offline(
-            df_addresses, selected_street, house_number or ""
-        )
-        if user_lat is None or user_lon is None:
-            st.session_state.shelter_result_error = "❌ Address not found in the municipal database. Please verify the house number."
-            st.session_state.shelter_result = None
-        else:
-            with st.spinner("Finding nearest shelters..."):
-                try:
-                    nearest, err = find_nearest_shelters_from_coords(user_lat, user_lon, df)
-                    if err:
-                        st.session_state.shelter_result_error = err
-                        st.session_state.shelter_result = None
-                    else:
-                        st.success(f"📍 Location identified: {display_address}")
-                        st.session_state.shelter_result = data_agent.format_response(display_address, nearest)
-                        st.session_state.shelter_result_error = None
-                        st.session_state.shelter_map_user_lat = user_lat
-                        st.session_state.shelter_map_user_lon = user_lon
-                        st.session_state.shelter_map_nearest = nearest
-                        st.session_state.shelter_used_fallback = used_fallback
-                        st.session_state.shelter_fallback_msg = (
-                            f"{selected_street} {fallback_closest_num}" if used_fallback and fallback_closest_num else None
-                        )
-                except Exception as e:
-                    st.session_state.shelter_result_error = str(e)
+        with st.spinner("Finding nearest shelters..."):
+            try:
+                nearest, err = find_nearest_shelters_from_coords(user_lat, user_lon, df)
+                if err:
+                    st.session_state.shelter_result_error = err
                     st.session_state.shelter_result = None
+                else:
+                    st.success(f"📍 Location identified: {display_address}")
+                    st.session_state.shelter_result = data_agent.format_response(display_address, nearest)
+                    st.session_state.shelter_result_error = None
+                    st.session_state.shelter_map_user_lat = user_lat
+                    st.session_state.shelter_map_user_lon = user_lon
+                    st.session_state.shelter_map_nearest = nearest
+                    st.session_state.shelter_used_fallback = used_fallback
+                    st.session_state.shelter_fallback_msg = (
+                        f"{selected_street} {fallback_closest_num}" if used_fallback and fallback_closest_num else None
+                    )
+            except Exception as e:
+                st.session_state.shelter_result_error = str(e)
+                st.session_state.shelter_result = None
 
 if st.session_state.shelter_result_error:
     st.error(st.session_state.shelter_result_error)
