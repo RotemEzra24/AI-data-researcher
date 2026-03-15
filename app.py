@@ -493,7 +493,7 @@ for msg in st.session_state.messages[-2:]:
         st.write(msg["content"])
 
 # Accept input from either the text box (Send) or the native chat input
-prompt_input = user_message.strip() if (send_clicked and user_message) else st.chat_input("איפה אתה נמצא? (לדוגמה: אני בדיזנגוף 50 עם עגלת תינוק)")
+prompt_input = user_message.strip() if (send_clicked and user_message) else st.chat_input("איפה אתה נמצא? (לדוגמה: אני בזידנגוף 50)")
 if prompt_input:
     st.session_state.messages.append({"role": "user", "content": prompt_input})
     if not validation_ok:
