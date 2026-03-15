@@ -641,12 +641,18 @@ with col_kpi2:
 
 # --- Emergency & System Info (bottom of page, next to About the Developer) ---
 with st.expander("\U0001f6e1\ufe0f Emergency & System Info", expanded=False):
-    st.markdown("<h4 style='text-align: center; color: #86868b;'>Emergency Lines</h4>", unsafe_allow_html=True)
+    st.markdown("<h4 style='text-align: center; color: #1d1d1f; margin-bottom: 12px;'>Emergency Lines</h4>", unsafe_allow_html=True)
     st.markdown(
-        "<p style='text-align: center; color: #86868b;'>**104** - Home Front Command<br>**100** - Police<br>**101** - Ambulance</p>",
+        """
+        <div style='display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 16px;'>
+            <a href='tel:104' style='display: inline-block; text-decoration: none; background: linear-gradient(135deg, #0071e3 0%, #4facfe 100%); color: white; padding: 12px 20px; border-radius: 12px; font-weight: 600; font-size: 14px; box-shadow: 0 2px 8px rgba(0,113,227,0.3);'>104 – Home Front</a>
+            <a href='tel:100' style='display: inline-block; text-decoration: none; background: linear-gradient(135deg, #0071e3 0%, #4facfe 100%); color: white; padding: 12px 20px; border-radius: 12px; font-weight: 600; font-size: 14px; box-shadow: 0 2px 8px rgba(0,113,227,0.3);'>100 – Police</a>
+            <a href='tel:101' style='display: inline-block; text-decoration: none; background: linear-gradient(135deg, #0071e3 0%, #4facfe 100%); color: white; padding: 12px 20px; border-radius: 12px; font-weight: 600; font-size: 14px; box-shadow: 0 2px 8px rgba(0,113,227,0.3);'>101 – Ambulance</a>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
-    st.info("**💡 Why trust this app? System relies on local municipal data processing for zero-latency routing, and provides a manual-entry fallback to entirely bypass GPS spoofing and jamming. ")
+    st.info("**Why trust this app?** System relies on local municipal data processing for zero-latency routing, and provides a manual-entry fallback to entirely bypass GPS spoofing and jamming.")
 
 # --- About the Developer (bottom of page, above footer) ---
 with st.expander("About the Developer", expanded=False):
