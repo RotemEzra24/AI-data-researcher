@@ -11,6 +11,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.tools import tool
 from geopy.distance import geodesic
+from streamlit_geolocation import streamlit_geolocation
 
 # --- 1. Page Configuration ---
 st.set_page_config(
@@ -407,7 +408,8 @@ def _create_agent_executor():
     tools = [geocode_address, find_shelters]
     system_msg = (
         "You are a Tel Aviv tactical emergency assistant. The user will state their location and situation. "
-        "1. Use 'geocode_address' to find coordinates (street_name in Hebrew, house_number as string). "
+        "If the user provides exact latitude and longitude coordinates, SKIP the 'geocode_address' tool entirely and directly use the 'find_shelters' tool with those exact coordinates. "
+        "Otherwise: 1. Use 'geocode_address' to find coordinates (street_name in Hebrew, house_number as string). "
         "2. Use 'find_shelters' to find the 3 closest safe locations. "
         "3. Provide ONLY a short, tactical opening sentence (e.g., 'הנה המקלטים הקרובים ביותר אליך. הישאר בטוח.'). "
         "CRITICAL: DO NOT output the list of shelters or their distances yourself. The UI will handle displaying the list. Do not output raw JSON."
@@ -484,6 +486,36 @@ with btn_col:
 for msg in st.session_state.messages[-2:]:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
+
+# Geolocation: use device location (above chat input)
+st.markdown("<p style='text-align: center; color: #515154; font-size: 14px; margin-bottom: 5px; margin-top: 20px;'>או לחץ כאן כדי להשתמש במיקום הנוכחי שלך:</p>", unsafe_allow_html=True)
+loc = streamlit_geolocation()
+if loc and loc.get("latitude") is not None and loc.get("longitude") is not None:
+    lat = loc["latitude"]
+    lon = loc["longitude"]
+    loc_str = f"{lat},{lon}"
+    if "last_processed_loc" not in st.session_state or st.session_state.last_processed_loc != loc_str:
+        st.session_state.last_processed_loc = loc_str
+        gps_prompt = f"המיקום המדויק שלי הוא קו רוחב {lat} וקו אורך {lon}. מצא לי מקלטים קרובים."
+        user_display = "משתמש במיקום GPS נוכחי..."
+        st.session_state.messages.append({"role": "user", "content": user_display})
+        if validation_ok:
+            chat_history = []
+            for m in st.session_state.messages[:-1]:
+                if m["role"] == "user":
+                    chat_history.append(HumanMessage(content=m["content"]))
+                else:
+                    chat_history.append(AIMessage(content=m["content"]))
+            try:
+                agent_executor = _create_agent_executor()
+                result = agent_executor.invoke({"input": gps_prompt, "chat_history": chat_history})
+                reply = result.get("output", str(result))
+            except Exception as e:
+                reply = f"שגיאה: {e}"
+        else:
+            reply = "Cannot search: please add OPENAI_API_KEY to .env and ensure tlv_shelters.csv and tlv_addresses.csv exist."
+        st.session_state.messages.append({"role": "assistant", "content": reply})
+        st.rerun()
 
 # Accept input from either the text box (Send) or the native chat input
 prompt_input = user_message.strip() if (send_clicked and user_message) else st.chat_input("איפה אתה נמצא? (לדוגמה: אני בזידנגוף 50)")
