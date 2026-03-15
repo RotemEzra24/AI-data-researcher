@@ -313,7 +313,12 @@ with st.expander("Emergency & System Info", expanded=False):
 with st.expander("About the Developer", expanded=False):
     st.markdown("<h4 style='text-align: center; color: #86868b; margin-bottom: 10px;'>About the Developer</h4>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #86868b; font-size: 15px; line-height: 1.6; max-width: 600px; margin: 0 auto;'>Hi, I'm Rotem, an Electrical and Electronics Engineering student with a growing focus on GenAI, Data Science, and Data Engineering. I'm passionate about building practical tools that combine data and technology to solve real-world problems.</p>", unsafe_allow_html=True)
-    st.markdown("<div style='text-align: center; margin-top: 20px; margin-bottom: 10px;'><a href='https://www.linkedin.com/in/rotem-ezra-24-07-97re/' target='_blank' style='text-decoration: none; font-weight: 500; background-color: #0a66c2; color: white; padding: 8px 20px; border-radius: 20px; font-size: 14px;'>LinkedIn</a></div>", unsafe_allow_html=True)
+    st.markdown("""
+<div style='text-align: center; margin-top: 20px; margin-bottom: 10px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;'>
+    <a href='https://www.linkedin.com/in/rotem-ezra-24-07-97re/' target='_blank' style='text-decoration: none; font-weight: 500; background-color: #0a66c2; color: white; padding: 8px 20px; border-radius: 20px; font-size: 14px;'>LinkedIn</a>
+    <a href='https://github.com/RotemEzra24/AI-data-researcher' target='_blank' style='text-decoration: none; font-weight: 500; background-color: #24292f; color: white; padding: 8px 20px; border-radius: 20px; font-size: 14px;'>GitHub</a>
+</div>
+""", unsafe_allow_html=True)
 
 # --- Footer ---
 st.markdown("""
