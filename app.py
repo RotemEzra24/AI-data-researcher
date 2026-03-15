@@ -526,8 +526,6 @@ with btn_col:
 prompt_input = user_message.strip() if (send_clicked and user_message) else st.chat_input("איפה אתה נמצא? (לדוגמה: אני בדיזנגוף 50 עם עגלת תינוק)")
 if prompt_input:
     st.session_state.messages.append({"role": "user", "content": prompt_input})
-    if "chat_text_input" in st.session_state:
-        st.session_state.chat_text_input = ""  # clear text box after send
     if not validation_ok:
         reply = "Cannot search: please add OPENAI_API_KEY to .env and ensure tlv_shelters.csv and tlv_addresses.csv exist."
     else:
