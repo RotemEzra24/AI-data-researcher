@@ -456,17 +456,18 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# --- Validation (before expanders so chat UI always renders when valid) ---
+# --- Validation (warn but do not stop so chat UI always renders) ---
+validation_ok = True
 if not os.getenv("OPENAI_API_KEY"):
     st.error("OpenAI API Key is missing. Please configure your .env file.")
-    st.stop()
+    validation_ok = False
 if not os.path.exists("tlv_shelters.csv"):
     st.error("Dataset file missing: tlv_shelters.csv")
-    st.stop()
+    validation_ok = False
 if not os.path.exists("tlv_addresses.csv"):
     st.error("Address database missing: tlv_addresses.csv. Run get_addresses.py to generate it.")
-    st.stop()
-df = load_shelters_data("tlv_shelters.csv")
+    validation_ok = False
+df = load_shelters_data("tlv_shelters.csv") if os.path.exists("tlv_shelters.csv") else pd.DataFrame()
 
 # --- Expander 1: About the Developer (below main header) ---
 with st.expander("👨‍💻 About the Developer", expanded=False):
@@ -508,24 +509,43 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-prompt_input = st.chat_input("איפה אתה נמצא? (לדוגמה: אני בדיזנגוף 50 עם עגלת תינוק)")
+# Always-visible text box + Send button (guarantees a visible input)
+input_col, btn_col = st.columns([5, 1])
+with input_col:
+    user_message = st.text_input(
+        "Your location or question",
+        placeholder="e.g. אני בדיזנגוף 50 עם עגלת תינוק",
+        key="chat_text_input",
+        label_visibility="collapsed",
+    )
+with btn_col:
+    st.markdown("<br>", unsafe_allow_html=True)  # align with input
+    send_clicked = st.button("Send", type="primary")
+
+# Accept input from either the text box (Send) or the native chat input
+prompt_input = user_message.strip() if (send_clicked and user_message) else st.chat_input("איפה אתה נמצא? (לדוגמה: אני בדיזנגוף 50 עם עגלת תינוק)")
 if prompt_input:
     st.session_state.messages.append({"role": "user", "content": prompt_input})
-    chat_history = []
-    for m in st.session_state.messages[:-1]:
-        if m["role"] == "user":
-            chat_history.append(HumanMessage(content=m["content"]))
-        else:
-            chat_history.append(AIMessage(content=m["content"]))
-    with st.spinner("מחפש מחסות..."):
-        try:
-            agent_executor = _create_agent_executor()
-            result = agent_executor.invoke(
-                {"input": prompt_input, "chat_history": chat_history}
-            )
-            reply = result.get("output", str(result))
-        except Exception as e:
-            reply = f"שגיאה: {e}"
+    if "chat_text_input" in st.session_state:
+        st.session_state.chat_text_input = ""  # clear text box after send
+    if not validation_ok:
+        reply = "Cannot search: please add OPENAI_API_KEY to .env and ensure tlv_shelters.csv and tlv_addresses.csv exist."
+    else:
+        chat_history = []
+        for m in st.session_state.messages[:-1]:
+            if m["role"] == "user":
+                chat_history.append(HumanMessage(content=m["content"]))
+            else:
+                chat_history.append(AIMessage(content=m["content"]))
+        with st.spinner("מחפש מחסות..."):
+            try:
+                agent_executor = _create_agent_executor()
+                result = agent_executor.invoke(
+                    {"input": prompt_input, "chat_history": chat_history}
+                )
+                reply = result.get("output", str(result))
+            except Exception as e:
+                reply = f"שגיאה: {e}"
     st.session_state.messages.append({"role": "assistant", "content": reply})
     st.rerun()
 
