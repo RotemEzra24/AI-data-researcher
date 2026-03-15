@@ -11,7 +11,10 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.tools import tool
 from geopy.distance import geodesic
-from streamlit_geolocation import streamlit_geolocation
+try:
+    from streamlit_geolocation import streamlit_geolocation
+except ModuleNotFoundError:
+    streamlit_geolocation = None  # optional: app works without it (e.g. on Streamlit Cloud)
 
 # --- 1. Page Configuration ---
 st.set_page_config(
@@ -487,9 +490,12 @@ for msg in st.session_state.messages[-2:]:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-# Geolocation: use device location (above chat input)
-st.markdown("<p style='text-align: center; color: #515154; font-size: 14px; margin-bottom: 5px; margin-top: 20px;'>או לחץ כאן כדי להשתמש במיקום הנוכחי שלך:</p>", unsafe_allow_html=True)
-loc = streamlit_geolocation()
+# Geolocation: use device location (above chat input), only if package is available
+if streamlit_geolocation is not None:
+    st.markdown("<p style='text-align: center; color: #515154; font-size: 14px; margin-bottom: 5px; margin-top: 20px;'>או לחץ כאן כדי להשתמש במיקום הנוכחי שלך:</p>", unsafe_allow_html=True)
+    loc = streamlit_geolocation()
+else:
+    loc = None
 if loc and loc.get("latitude") is not None and loc.get("longitude") is not None:
     lat = loc["latitude"]
     lon = loc["longitude"]
