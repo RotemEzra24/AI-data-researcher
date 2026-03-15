@@ -646,7 +646,7 @@ with st.expander("\U0001f6e1\ufe0f Emergency & System Info", expanded=False):
         "<p style='text-align: center; color: #515154;'>**104** - Home Front Command<br>**100** - Police<br>**101** - Ambulance</p>",
         unsafe_allow_html=True,
     )
-    st.info("**Why trust this app?** System operates with a fully offline geocoding fallback to bypass GPS spoofing and network crashes.")
+    st.info("**💡 Why trust this app? System relies on local municipal data processing for zero-latency routing, and provides a manual-entry fallback to entirely bypass GPS spoofing and jamming. ")
 
 # --- About the Developer (bottom of page, above footer) ---
 with st.expander("About the Developer", expanded=False):
