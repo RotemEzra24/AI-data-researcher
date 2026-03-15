@@ -480,19 +480,10 @@ for msg in st.session_state.messages[-2:]:
 
 # Geolocation: use device location (above chat input), only if package is available
 if streamlit_geolocation is not None:
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown(
-        """
-        <div style='display: flex; justify-content: center; align-items: center; flex-direction: column; width: 100%; margin-bottom: 8px;'>
-            <p style='color: #515154; font-size: 14px; font-weight: 500; margin: 0 0 4px 0;'>
-                <span style='font-size: 20px; vertical-align: middle;'>📍</span> Or use your live device location:
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    col_left, col_center, col_right = st.columns([1, 1, 1])
-    with col_center:
+    st.markdown("<p class='section-subtitle' style='margin-top: 1rem;'>📍 Or use your live device location:</p>", unsafe_allow_html=True)
+    loc_col_left, loc_col_btn = st.columns([5, 1])
+    with loc_col_btn:
+        st.markdown("<br>", unsafe_allow_html=True)  # align with row above
         loc = streamlit_geolocation()
 else:
     loc = None
