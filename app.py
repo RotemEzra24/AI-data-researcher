@@ -450,13 +450,14 @@ if not os.path.exists("tlv_addresses.csv"):
     validation_ok = False
 df = load_shelters_data("tlv_shelters.csv") if os.path.exists("tlv_shelters.csv") else pd.DataFrame()
 
-# --- Expander 1: About the Developer (below main header) ---
-with st.expander("About the Developer", expanded=False):
-    st.markdown("<h4 style='text-align: center; color: #86868b; margin-bottom: 10px;'>About the Developer</h4>", unsafe_allow_html=True)
-
-    st.markdown("<p style='text-align: center; color: #86868b; font-size: 15px; line-height: 1.6; max-width: 600px; margin: 0 auto;'>I'm Rotem, an Electrical and Electronics Engineering student with a strong interest in GenAI, Data Science, and Data Engineering. I built this offline-first shelter locator to provide a simple and reliable tool for emergencies. I'm a dedicated hard worker, passionate about learning new technologies and building practical, data-driven solutions.</p>", unsafe_allow_html=True)
-
-    st.markdown("<div style='text-align: center; margin-top: 20px; margin-bottom: 10px;'><a href='https://www.linkedin.com/in/rotem-ezra-24-07-97re/' target='_blank' style='text-decoration: none; font-weight: 500; background-color: #0a66c2; color: white; padding: 8px 20px; border-radius: 20px; font-size: 14px;'>LinkedIn</a></div>", unsafe_allow_html=True)
+# --- Emergency & System Info (below main title, above chat) ---
+with st.expander("Emergency & System Info", expanded=False):
+    st.markdown("<h4 style='text-align: center; color: #1d1d1f;'>Emergency Lines</h4>", unsafe_allow_html=True)
+    st.markdown(
+        "<p style='text-align: center; color: #515154;'>**104** – Home Front Command<br>**100** – Police<br>**101** – Ambulance</p>",
+        unsafe_allow_html=True,
+    )
+    st.info("**Why trust this app?** System operates with a fully offline geocoding fallback to bypass GPS spoofing and network crashes.")
 
 # --- Sidebar: About the Developer (recruiter exposure) ---
 with st.sidebar:
@@ -535,10 +536,11 @@ if "latest_map_data" in st.session_state:
                 if address and address != "Unknown Address" and user_lat is not None and user_lon is not None:
                     destination_encoded = quote(f"{address}, Tel Aviv, Israel", safe="")
                     gmaps_url = f"https://www.google.com/maps/dir/?api=1&origin={user_lat},{user_lon}&destination={destination_encoded}&travelmode=walking"
-                    st.markdown(f"**Option {i+1}:** [📍 Navigate to {address} (Google Maps)]({gmaps_url})")
                 elif lat is not None and lon is not None:
                     gmaps_url = f"https://www.google.com/maps/dir/?api=1&origin={user_lat},{user_lon}&destination={lat},{lon}&travelmode=walking"
-                    st.markdown(f"**Option {i+1}:** [📍 Navigate to {address} (Google Maps)]({gmaps_url})")
+                else:
+                    gmaps_url = "#"
+                st.markdown(f"**Option {i+1}:** {address} | [Open in Google Maps]({gmaps_url})")
         with col_map:
             if isinstance(shelters, list) and len(shelters) > 0 and "lat" in shelters[0] and "lon" in shelters[0]:
                 map_obj = build_satellite_map(user_lat, user_lon, shelters)
@@ -563,21 +565,18 @@ with col_kpi2:
         "linear-gradient(135deg, #43E97B 0%, #38F9D7 100%)",
     )
 
-# --- Emergency & System Info at bottom of page ---
-with st.expander("🛡️ מידע חירום ואמינות המערכת (Emergency & System Info)", expanded=False):
-    st.markdown("<h4 style='text-align: center; color: #1d1d1f;'>📞 מוקדי חירום (Emergency Lines)</h4>", unsafe_allow_html=True)
-    st.markdown(
-        "<p style='text-align: center; color: #515154;'>**104** – פיקוד העורף (Home Front Command)<br>**100** – משטרה (Police)<br>**101** – מד\"א (Ambulance)</p>",
-        unsafe_allow_html=True,
-    )
-    st.info("💡 **Why trust this app?** System operates with a fully offline geocoding fallback to bypass GPS spoofing and network crashes.")
+# --- About the Developer (bottom of page, above footer) ---
+with st.expander("About the Developer", expanded=False):
+    st.markdown("<h4 style='text-align: center; color: #1d1d1f; margin-bottom: 10px;'>About the Developer</h4>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #86868b; font-size: 15px; line-height: 1.6; max-width: 600px; margin: 0 auto;'>I'm Rotem, an Electrical and Electronics Engineering student with a strong interest in GenAI, Data Science, and Data Engineering. I built this offline-first shelter locator to provide a simple and reliable tool for emergencies. I'm a dedicated hard worker, passionate about learning new technologies and building practical, data-driven solutions.</p>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align: center; margin-top: 20px; margin-bottom: 10px;'><a href='https://www.linkedin.com/in/rotem-ezra-24-07-97re/' target='_blank' style='text-decoration: none; font-weight: 500; background-color: #0a66c2; color: white; padding: 8px 20px; border-radius: 20px; font-size: 14px;'>LinkedIn</a></div>", unsafe_allow_html=True)
 
 # --- Connection status footer ---
 st.markdown(
     """
     <div style='text-align: center; color: #86868b; font-size: 12px; margin-top: 2rem;'>
         <p style='margin: 0;'>Dataset — This dashboard is connected to Tel Aviv Municipality emergency shelters data.</p>
-        <p style='margin: 0.25rem 0 0 0;'>🟢 Connected: Tel Aviv Emergency Shelters DB</p>
+        <p style='margin: 0.25rem 0 0 0;'>Connected: Tel Aviv Emergency Shelters DB</p>
     </div>
     """,
     unsafe_allow_html=True,
