@@ -1,6 +1,7 @@
 import os
 from urllib.parse import quote
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import folium
 from streamlit_folium import st_folium
@@ -478,15 +479,57 @@ for msg in st.session_state.messages[-2:]:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-# Geolocation: use device location (above chat input), only if package is available
-if streamlit_geolocation is not None:
-    st.markdown("<p class='section-subtitle' style='margin-top: 1rem;'>📍 Or use your live device location:</p>", unsafe_allow_html=True)
-    loc_col_left, loc_col_btn = st.columns([5, 1])
-    with loc_col_btn:
-        st.markdown("<br>", unsafe_allow_html=True)  # align with row above
-        loc = streamlit_geolocation()
-else:
-    loc = None
+# Geolocation: "Share location" button (same style as Send) - uses browser Geolocation API, passes coords via query params
+loc = None
+_q_lat = st.query_params.get("lat")
+_q_lon = st.query_params.get("lon")
+if _q_lat is not None and _q_lon is not None:
+    try:
+        loc = {"latitude": float(_q_lat), "longitude": float(_q_lon)}
+    except (ValueError, TypeError):
+        loc = None
+st.markdown("<p class='section-subtitle' style='margin-top: 1rem;'>📍 Or use your live device location:</p>", unsafe_allow_html=True)
+loc_col_left, loc_col_btn = st.columns([5, 1])
+with loc_col_btn:
+    st.markdown("<br>", unsafe_allow_html=True)
+    share_location_html = """
+    <div id="share-loc-container">
+        <button type="button" id="share-loc-btn" style="
+            background: linear-gradient(135deg, #0071e3 0%, #4facfe 100%);
+            color: white; border-radius: 980px; padding: 10px 24px;
+            font-weight: 600; border: none; font-size: 1rem; cursor: pointer;
+            width: 100%; max-width: 160px;
+        ">Share location</button>
+    </div>
+    <script>
+        (function() {
+            var btn = document.getElementById('share-loc-btn');
+            if (!btn) return;
+            btn.onclick = function() {
+                btn.disabled = true;
+                btn.textContent = 'Getting location...';
+                if (!navigator.geolocation) {
+                    btn.textContent = 'Not supported';
+                    return;
+                }
+                navigator.geolocation.getCurrentPosition(
+                    function(pos) {
+                        var w = window.top || window.parent || window;
+                        var url = new URL(w.location.href);
+                        url.searchParams.set('lat', pos.coords.latitude);
+                        url.searchParams.set('lon', pos.coords.longitude);
+                        w.location.href = url.toString();
+                    },
+                    function() {
+                        btn.textContent = 'Share location';
+                        btn.disabled = false;
+                    }
+                );
+            };
+        })();
+    </script>
+    """
+    components.html(share_location_html, height=50)
 if loc and loc.get("latitude") is not None and loc.get("longitude") is not None:
     lat = loc["latitude"]
     lon = loc["longitude"]
