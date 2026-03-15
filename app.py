@@ -455,7 +455,7 @@ with st.expander("👨‍💻 About the Developer", expanded=False):
 
     st.markdown("<p style='text-align: center; color: #515154; font-size: 15px; line-height: 1.6; max-width: 600px; margin: 0 auto;'>Hey, I'm Rotem. I'm a GenAI Data Scientist and an Electrical Engineering student. I built this offline-first shelter locator to provide a fast, reliable tool for emergencies when internet or GPS might fail. Combining my tech background with my operational experience as a former IDF combat commander, my goal is to build practical, data-driven tools that actually help people when it matters most.</p>", unsafe_allow_html=True)
 
-    st.markdown("<div style='text-align: center; margin-top: 20px; margin-bottom: 10px;'><a href='www.linkedin.com/in/rotem-ezra-24-07-97re'",
+    st.markdown("<div style='text-align: center; margin-top: 20px; margin-bottom: 10px;'><a href='www.linkedin.com/in/rotem-ezra-24-07-97re'"),
 
 ' target='_blank' style='text-decoration: none; font-weight: 500; background-color: #0a66c2; color: white; padding: 8px 20px; border-radius: 20px; font-size: 14px;'>🔗 Let's connect on LinkedIn</a></div>", unsafe_allow_html=True)
 
