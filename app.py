@@ -488,7 +488,7 @@ if _q_lat is not None and _q_lon is not None:
         loc = {"latitude": float(_q_lat), "longitude": float(_q_lon)}
     except (ValueError, TypeError):
         loc = None
-st.markdown("<p class='section-subtitle' style='margin-top: 1rem;'>📍 Or use your live device location(might not be working due to GPS signal blocking.):</p>", unsafe_allow_html=True)
+st.markdown("<p class='section-subtitle' style='margin-top: 1rem;'>📍 Or use your live device location (might not be working due to GPS signal blocking.):</p>", unsafe_allow_html=True)
 loc_col_left, loc_col_btn = st.columns([5, 1])
 with loc_col_btn:
     st.markdown("<br>", unsafe_allow_html=True)
