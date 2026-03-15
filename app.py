@@ -282,15 +282,6 @@ def find_nearest_shelters_from_coords(
             "location",
         ],
     )
-    accessibility_col = pick_col(
-        df,
-        [
-            "miklat_mungash",  # Tel Aviv shelters: accessible shelter indicator
-            "Accessibility",
-            "accessibility",
-            "נגישות",
-        ],
-    )
     size_col = pick_col(
         df,
         [
@@ -313,11 +304,6 @@ def find_nearest_shelters_from_coords(
                     else "Unknown"
                 ),
                 "distance_m": int(round(float(row["distance_m"]))),
-                "accessibility": (
-                    str(row[accessibility_col]).strip()
-                    if accessibility_col and pd.notna(row.get(accessibility_col))
-                    else "Unknown"
-                ),
                 "size": (
                     f"{float(row[size_col]):,.0f} m²"
                     if size_col and pd.notna(row.get(size_col)) and str(row.get(size_col)).strip() != ""
@@ -392,19 +378,12 @@ def geocode_address(street_name: str, house_number: int | str) -> dict | str:
 
 
 @tool
-def find_shelters(lat: float, lon: float, accessible_only: bool = False) -> list:
+def find_shelters(lat: float, lon: float) -> list:
     """
     Find the 3 closest emergency shelters to the given coordinates in Tel Aviv.
-    Set accessible_only=True if the user mentions wheelchairs, strollers, or mobility issues.
-    Returns a list of up to 3 shelters with distance_m, address, lat, lon, accessibility, size.
+    Returns a list of up to 3 shelters with distance_m, address, lat, lon, size.
     """
     df = load_shelters_data("tlv_shelters.csv")
-    if accessible_only and "miklat_mungash" in df.columns:
-        acc = df["miklat_mungash"].astype(str).str.strip()
-        mask = acc.notna() & (acc != "") & ~acc.str.lower().isin(("0", "false", "no", "לא"))
-        df = df.loc[mask].copy()
-        if df.empty:
-            df = load_shelters_data("tlv_shelters.csv")
     top_3_list, err = find_nearest_shelters_from_coords(lat, lon, df)
     if err:
         return []
@@ -428,7 +407,7 @@ def _create_agent_executor():
     system_msg = (
         "You are a Tel Aviv tactical emergency assistant. The user will state their location and situation. "
         "1. Use 'geocode_address' to find coordinates (street_name in Hebrew, house_number as string). "
-        "2. Use 'find_shelters' to find safe locations (pass accessible_only=True if they mention wheelchairs, strollers, or mobility issues). "
+        "2. Use 'find_shelters' to find the 3 closest safe locations. "
         "3. Reply to the user in short, tactical Hebrew with clear navigation instructions. Do not output raw JSON to the user."
     )
     prompt = ChatPromptTemplate.from_messages(
