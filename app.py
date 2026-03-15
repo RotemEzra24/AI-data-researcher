@@ -641,9 +641,9 @@ with col_kpi2:
 
 # --- Emergency & System Info (bottom of page, next to About the Developer) ---
 with st.expander("\U0001f6e1\ufe0f Emergency & System Info", expanded=False):
-    st.markdown("<h4 style='text-align: center; color: #1d1d1f;'>Emergency Lines</h4>", unsafe_allow_html=True)
+    st.markdown("<h4 style='text-align: center; color: #86868b;'>Emergency Lines</h4>", unsafe_allow_html=True)
     st.markdown(
-        "<p style='text-align: center; color: #515154;'>**104** - Home Front Command<br>**100** - Police<br>**101** - Ambulance</p>",
+        "<p style='text-align: center; color: #86868b;'>**104** - Home Front Command<br>**100** - Police<br>**101** - Ambulance</p>",
         unsafe_allow_html=True,
     )
     st.info("**💡 Why trust this app? System relies on local municipal data processing for zero-latency routing, and provides a manual-entry fallback to entirely bypass GPS spoofing and jamming. ")
