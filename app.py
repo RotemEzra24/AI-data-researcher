@@ -568,7 +568,7 @@ if loc and loc.get("latitude") is not None and loc.get("longitude") is not None:
         st.rerun()
 
 # Accept input from either the text box (Send) or the native chat input
-prompt_input = user_message.strip() if (send_clicked and user_message) else st.chat_input("Where are you? (e.g., 30 Ibn Gabirol with a wheelchair)")
+prompt_input = user_message.strip() if (send_clicked and user_message) else st.chat_input("לדוגמה: אני בדיזנגוף 50")
 if prompt_input:
     st.session_state.messages.append({"role": "user", "content": prompt_input})
     if not validation_ok:
