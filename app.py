@@ -456,6 +456,18 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# --- Validation (before expanders so chat UI always renders when valid) ---
+if not os.getenv("OPENAI_API_KEY"):
+    st.error("OpenAI API Key is missing. Please configure your .env file.")
+    st.stop()
+if not os.path.exists("tlv_shelters.csv"):
+    st.error("Dataset file missing: tlv_shelters.csv")
+    st.stop()
+if not os.path.exists("tlv_addresses.csv"):
+    st.error("Address database missing: tlv_addresses.csv. Run get_addresses.py to generate it.")
+    st.stop()
+df = load_shelters_data("tlv_shelters.csv")
+
 # --- Expander 1: About the Developer (below main header) ---
 with st.expander("👨‍💻 About the Developer", expanded=False):
     st.markdown("<h4 style='text-align: center; color: #1d1d1f;'>👨‍💻 About the Developer</h4>", unsafe_allow_html=True)
@@ -487,20 +499,8 @@ with st.sidebar:
     st.markdown("[🔗 LinkedIn](#)")
     st.markdown("[🐙 GitHub](#)")
 
-if not os.getenv("OPENAI_API_KEY"):
-    st.error("OpenAI API Key is missing. Please configure your .env file.")
-    st.stop()
-
-if not os.path.exists("tlv_shelters.csv"):
-    st.error("Dataset file missing: tlv_shelters.csv")
-    st.stop()
-if not os.path.exists("tlv_addresses.csv"):
-    st.error("Address database missing: tlv_addresses.csv. Run get_addresses.py to generate it.")
-    st.stop()
-
-df = load_shelters_data("tlv_shelters.csv")
-
-# --- 4. Chat history and conversational agent ---
+# --- 4. Chat UI (directly below expanders) ---
+st.markdown("<p class='section-subtitle' style='margin-top: 1rem;'>Type your location below to find nearby shelters.</p>", unsafe_allow_html=True)
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
