@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 from typing import Any, Dict, List, Tuple
 
 import pandas as pd
@@ -84,8 +85,10 @@ def main() -> None:
     cols = preferred + [c for c in df.columns if c not in preferred]
     df = df[cols]
 
-    df.to_csv("tlv_shelters.csv", index=False)
-    print(f"Success! Saved {len(df)} shelters to tlv_shelters.csv")
+    os.makedirs("data", exist_ok=True)
+    out_path = os.path.join("data", "tlv_shelters.csv")
+    df.to_csv(out_path, index=False)
+    print(f"Success! Saved {len(df)} shelters to {out_path}")
 
 
 if __name__ == "__main__":

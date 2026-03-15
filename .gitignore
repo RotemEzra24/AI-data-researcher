@@ -3,5 +3,9 @@ env.
 venv/
 env/
 __pycache__/
+*.pyc
 temp_plot.png
 .DS_Store
+
+# Streamlit secrets (never commit API keys)
+.streamlit/secrets.toml
