@@ -6,9 +6,11 @@ import folium
 from streamlit_folium import st_folium
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
+from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.tools import tool
 from geopy.distance import geodesic
-
-from prompts import build_agent_prompt
 
 # --- 1. Page Configuration ---
 st.set_page_config(
@@ -114,34 +116,6 @@ def premium_widget(title, value, subtitle, gradient="linear-gradient(90deg, #1d1
     </div>
     """
     st.markdown(html, unsafe_allow_html=True)
-
-
-class DataResearchAgent:
-    """
-    The application computes nearest shelters deterministically in Python.
-    The LLM is used only to format the output clearly and urgently.
-    """
-
-    def __init__(self, df: pd.DataFrame, is_car_data: bool) -> None:
-        self.df = df
-        self.is_car_data = is_car_data
-        self._llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-
-    def format_response(self, user_input: str, nearest_rows: list[dict]) -> str:
-        """
-        Format the precomputed nearest shelters into a clean, urgent response.
-        """
-        system_prompt = build_agent_prompt(
-            user_question=user_input,
-            df=self.df,
-            is_car_data=False,
-        )
-        full_prompt = (
-            f"{system_prompt}\n\n"
-            f"Nearest shelters (precomputed, do not recalculate):\n{nearest_rows}\n"
-        )
-        resp = self._llm.invoke(full_prompt)
-        return getattr(resp, "content", str(resp))
 
 
 @st.cache_data(show_spinner=False)
@@ -399,13 +373,83 @@ def build_satellite_map(
     return m
 
 
+# --- LangChain tools for the conversational agent ---
+@tool
+def geocode_address(street_name: str, house_number: int | str) -> dict | str:
+    """
+    Look up coordinates for a Hebrew street name and house number in Tel Aviv.
+    Use this when the user gives their location (e.g. street name and number).
+    street_name: Hebrew street name (e.g. דיזנגוף). house_number: number as int or string.
+    Returns a dict with lat, lon and found_address, or an error string if not found.
+    """
+    df_addresses = load_addresses_data("tlv_addresses.csv")
+    lat, lon, display_address, _used_fallback, _fallback_num = lookup_address_offline(
+        df_addresses, street_name.strip(), str(house_number).strip()
+    )
+    if lat is None or lon is None:
+        return "Address not found in the municipal database. Please verify the street name and house number."
+    return {"lat": lat, "lon": lon, "found_address": display_address or f"{street_name} {house_number}, Tel Aviv"}
+
+
+@tool
+def find_shelters(lat: float, lon: float, accessible_only: bool = False) -> list:
+    """
+    Find the 3 closest emergency shelters to the given coordinates in Tel Aviv.
+    Set accessible_only=True if the user mentions wheelchairs, strollers, or mobility issues.
+    Returns a list of up to 3 shelters with distance_m, address, lat, lon, accessibility, size.
+    """
+    df = load_shelters_data("tlv_shelters.csv")
+    if accessible_only and "miklat_mungash" in df.columns:
+        acc = df["miklat_mungash"].astype(str).str.strip()
+        mask = acc.notna() & (acc != "") & ~acc.str.lower().isin(("0", "false", "no", "לא"))
+        df = df.loc[mask].copy()
+        if df.empty:
+            df = load_shelters_data("tlv_shelters.csv")
+    top_3_list, err = find_nearest_shelters_from_coords(lat, lon, df)
+    if err:
+        return []
+    if top_3_list:
+        try:
+            st.session_state.latest_map_data = {
+                "user_lat": lat,
+                "user_lon": lon,
+                "shelters": top_3_list,
+            }
+        except Exception:
+            pass
+    return top_3_list
+
+
+@st.cache_resource
+def _create_agent_executor():
+    """Build the tool-calling agent and executor (cached per session)."""
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    tools = [geocode_address, find_shelters]
+    system_msg = (
+        "You are a Tel Aviv tactical emergency assistant. The user will state their location and situation. "
+        "1. Use 'geocode_address' to find coordinates (street_name in Hebrew, house_number as string). "
+        "2. Use 'find_shelters' to find safe locations (pass accessible_only=True if they mention wheelchairs, strollers, or mobility issues). "
+        "3. Reply to the user in short, tactical Hebrew with clear navigation instructions. Do not output raw JSON to the user."
+    )
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", system_msg),
+            MessagesPlaceholder(variable_name="chat_history"),
+            ("human", "{input}"),
+            MessagesPlaceholder(variable_name="agent_scratchpad"),
+        ]
+    )
+    agent = create_tool_calling_agent(llm, tools, prompt)
+    return AgentExecutor(agent=agent, tools=tools, verbose=True)
+
+
 # --- 3. Hero Section ---
 st.markdown(
     """
     <div class="hero-card">
         <h1>Tel Aviv Emergency Shelters.</h1>
         <p class="hero-subtitle">
-            Enter your current location to find the closest shelters immediately.
+            Describe your location in chat to find the closest shelters immediately.
         </p>
     </div>
     """,
@@ -455,132 +499,63 @@ if not os.path.exists("tlv_addresses.csv"):
     st.stop()
 
 df = load_shelters_data("tlv_shelters.csv")
-df_addresses = load_addresses_data("tlv_addresses.csv")
 
-# --- 4. Smart Input Row (Street + House Number) ---
-street_names = get_streets_from_addresses()
-street_options = ["Select street…"] + (street_names if street_names else [])
+# --- 4. Chat history and conversational agent ---
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-input_col1, input_col2, input_col_btn = st.columns([3, 1, 1], vertical_alignment="bottom")
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.write(msg["content"])
 
-with input_col1:
-    selected_street = st.selectbox(
-        "Street Name",
-        options=street_options,
-        index=None,
-        placeholder="e.g., מאיר דיזנגוף",
-        key="shelter_street",
-    )
+prompt_input = st.chat_input("איפה אתה נמצא? (לדוגמה: אני בדיזנגוף 50 עם עגלת תינוק)")
+if prompt_input:
+    st.session_state.messages.append({"role": "user", "content": prompt_input})
+    chat_history = []
+    for m in st.session_state.messages[:-1]:
+        if m["role"] == "user":
+            chat_history.append(HumanMessage(content=m["content"]))
+        else:
+            chat_history.append(AIMessage(content=m["content"]))
+    with st.spinner("מחפש מחסות..."):
+        try:
+            agent_executor = _create_agent_executor()
+            result = agent_executor.invoke(
+                {"input": prompt_input, "chat_history": chat_history}
+            )
+            reply = result.get("output", str(result))
+        except Exception as e:
+            reply = f"שגיאה: {e}"
+    st.session_state.messages.append({"role": "assistant", "content": reply})
+    st.rerun()
 
-with input_col2:
-    house_number = st.text_input(
-        "House Number",
-        placeholder="e.g., 50",
-        key="shelter_house_number",
-    )
+# --- 5. Folium map and Google Maps links (from latest tool-call result) ---
+if "latest_map_data" in st.session_state:
+    map_data = st.session_state.latest_map_data
+    user_lat = map_data.get("user_lat")
+    user_lon = map_data.get("user_lon")
+    shelters = map_data.get("shelters") or []
+    if user_lat is not None and user_lon is not None and shelters:
+        col_text, col_map = st.columns([1, 1], gap="large")
+        with col_text:
+            st.markdown("*Note: GPS might not be accurate due to signal blocking.*")
+            for i, shelter in enumerate(shelters):
+                lat = shelter.get("lat")
+                lon = shelter.get("lon")
+                address = shelter.get("address") or shelter.get("t_ktovet") or "Unknown Address"
+                if address and address != "Unknown Address" and user_lat is not None and user_lon is not None:
+                    destination_encoded = quote(f"{address}, Tel Aviv, Israel", safe="")
+                    gmaps_url = f"https://www.google.com/maps/dir/?api=1&origin={user_lat},{user_lon}&destination={destination_encoded}&travelmode=walking"
+                    st.markdown(f"**Option {i+1}:** [📍 Navigate to {address} (Google Maps)]({gmaps_url})")
+                elif lat is not None and lon is not None:
+                    gmaps_url = f"https://www.google.com/maps/dir/?api=1&origin={user_lat},{user_lon}&destination={lat},{lon}&travelmode=walking"
+                    st.markdown(f"**Option {i+1}:** [📍 Navigate to {address} (Google Maps)]({gmaps_url})")
+        with col_map:
+            if isinstance(shelters, list) and len(shelters) > 0 and "lat" in shelters[0] and "lon" in shelters[0]:
+                map_obj = build_satellite_map(user_lat, user_lon, shelters)
+                st_folium(map_obj, use_container_width=True, height=400)
 
-with input_col_btn:
-    st.markdown("<br>", unsafe_allow_html=True)  # align button with inputs
-    find_clicked = st.button("Find Closest Shelter", type="primary")
-
-# --- 5. AI Agent (used only when displaying result) ---
-data_agent = DataResearchAgent(df=df, is_car_data=False)
-
-# --- 6. AI Result (shown below smart input; persisted in session state) ---
-if "shelter_result" not in st.session_state:
-    st.session_state.shelter_result = None
-if "shelter_result_error" not in st.session_state:
-    st.session_state.shelter_result_error = None
-
-if find_clicked:
-    has_street = selected_street is not None and selected_street != "Select street…"
-    has_house = house_number and str(house_number).strip()
-    if not has_street or not has_house:
-        st.warning("Please select a street and enter a house number first.")
-        st.stop()
-    user_lat, user_lon, display_address, used_fallback, fallback_closest_num = lookup_address_offline(
-        df_addresses, selected_street, house_number or ""
-    )
-    if user_lat is None or user_lon is None:
-        st.session_state.shelter_result_error = "❌ Address not found in the municipal database. Please verify the house number."
-        st.session_state.shelter_result = None
-    else:
-        with st.spinner("Finding nearest shelters..."):
-            try:
-                nearest, err = find_nearest_shelters_from_coords(user_lat, user_lon, df)
-                if err:
-                    st.session_state.shelter_result_error = err
-                    st.session_state.shelter_result = None
-                else:
-                    st.success(f"📍 Location identified: {display_address}")
-                    st.session_state.shelter_result = data_agent.format_response(display_address, nearest)
-                    st.session_state.shelter_result_error = None
-                    st.session_state.shelter_map_user_lat = user_lat
-                    st.session_state.shelter_map_user_lon = user_lon
-                    st.session_state.shelter_map_nearest = nearest
-                    st.session_state.shelter_used_fallback = used_fallback
-                    st.session_state.shelter_fallback_msg = (
-                        f"{selected_street} {fallback_closest_num}" if used_fallback and fallback_closest_num else None
-                    )
-            except Exception as e:
-                st.session_state.shelter_result_error = str(e)
-                st.session_state.shelter_result = None
-
-if st.session_state.shelter_result_error:
-    st.error(st.session_state.shelter_result_error)
-    st.session_state.pop("shelter_map_user_lat", None)
-    st.session_state.pop("shelter_map_user_lon", None)
-    st.session_state.pop("shelter_map_nearest", None)
-    st.session_state.pop("shelter_used_fallback", None)
-    st.session_state.pop("shelter_fallback_msg", None)
-
-if st.session_state.shelter_result:
-    if st.session_state.get("shelter_used_fallback") and st.session_state.get("shelter_fallback_msg"):
-        st.warning(
-            f"⚠️ Exact house number not found. Calculating distance from the nearest available address: {st.session_state['shelter_fallback_msg']}"
-        )
-    col_text, col_map = st.columns([1, 1], gap="large")
-    with col_text:
-        st.markdown(
-            """
-            <div style='background: white; border-left: 4px solid #0071e3; padding: 20px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); margin-top: 18px;'>
-            """,
-            unsafe_allow_html=True,
-        )
-        st.write(st.session_state.shelter_result)
-        st.markdown("</div>", unsafe_allow_html=True)
-        st.markdown("*Note: GPS might not be accurate due to signal blocking.*")
-        user_lat = st.session_state.get("shelter_map_user_lat")
-        user_lon = st.session_state.get("shelter_map_user_lon")
-        top_3 = st.session_state.get("shelter_map_nearest") or []
-        for i, shelter in enumerate(top_3):
-            lat = shelter.get("lat")
-            lon = shelter.get("lon")
-            address = shelter.get("address") or shelter.get("t_ktovet") or "Unknown Address"
-            if address and address != "Unknown Address" and user_lat is not None and user_lon is not None:
-                destination_encoded = quote(f"{address}, Tel Aviv, Israel", safe="")
-                gmaps_url = f"https://www.google.com/maps/dir/?api=1&origin={user_lat},{user_lon}&destination={destination_encoded}&travelmode=walking"
-                st.markdown(f"**Option {i+1}:** [📍 Navigate to {address} (Google Maps)]({gmaps_url})")
-            elif lat is not None and lon is not None and user_lat is not None and user_lon is not None:
-                gmaps_url = f"https://www.google.com/maps/dir/?api=1&origin={user_lat},{user_lon}&destination={lat},{lon}&travelmode=walking"
-                st.markdown(f"**Option {i+1}:** [📍 Navigate to {address} (Google Maps)]({gmaps_url})")
-    with col_map:
-        map_lat = st.session_state.get("shelter_map_user_lat")
-        map_lon = st.session_state.get("shelter_map_user_lon")
-        map_nearest = st.session_state.get("shelter_map_nearest")
-        if (
-            map_lat is not None
-            and map_lon is not None
-            and map_nearest
-            and isinstance(map_nearest, list)
-            and len(map_nearest) > 0
-            and "lat" in map_nearest[0]
-            and "lon" in map_nearest[0]
-        ):
-            map_obj = build_satellite_map(map_lat, map_lon, map_nearest)
-            st_folium(map_obj, use_container_width=True, height=400)
-
-# --- 7. KPI widgets at the very bottom (secondary info) ---
+# --- 6. KPI widgets at the very bottom (secondary info) ---
 st.markdown("<br><br>", unsafe_allow_html=True)
 col_kpi1, col_kpi2 = st.columns(2)
 
