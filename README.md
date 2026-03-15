@@ -25,13 +25,13 @@ The codebase is strictly modular, separating the frontend, AI logic, and data pr
 2. **Data**
 
  ##  Prepare the Data
-*The application requires Tel Aviv municipality datasets. Place the following files in a data/ folder in the root directory:
+* The application requires Tel Aviv municipality datasets. Place the following files in a data/ folder in the root directory:
 
-*data/tlv_shelters.csv (contains latitude, longitude, and address)
+* data/tlv_shelters.csv (contains latitude, longitude, and address)
 
-*data/tlv_addresses.csv (contains the municipal address grid)
+* data/tlv_addresses.csv (contains the municipal address grid)
 
-*Note: You can fetch the latest data using the provided scraping scripts (python get_shelters.py and python get_addresses.py).
+* Note: You can fetch the latest data using the provided scraping scripts (python get_shelters.py and python get_addresses.py).
 
 3. **Secrets**
 
