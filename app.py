@@ -452,7 +452,7 @@ df = load_shelters_data("tlv_shelters.csv") if os.path.exists("tlv_shelters.csv"
 
 # --- Expander 1: About the Developer (below main header) ---
 with st.expander("About the Developer", expanded=False):
-    st.markdown("<h4 style='text-align: center; color: #1d1d1f; margin-bottom: 10px;'>About the Developer</h4>", unsafe_allow_html=True)
+    st.markdown("<h4 style='text-align: center; color: #86868b; margin-bottom: 10px;'>About the Developer</h4>", unsafe_allow_html=True)
 
     st.markdown("<p style='text-align: center; color: #86868b; font-size: 15px; line-height: 1.6; max-width: 600px; margin: 0 auto;'>I'm Rotem, an Electrical and Electronics Engineering student with a strong interest in GenAI, Data Science, and Data Engineering. I built this offline-first shelter locator to provide a simple and reliable tool for emergencies. I'm a dedicated hard worker, passionate about learning new technologies and building practical, data-driven solutions.</p>", unsafe_allow_html=True)
 
