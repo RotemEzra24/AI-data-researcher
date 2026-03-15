@@ -409,8 +409,8 @@ def _create_agent_executor():
         "You are a Tel Aviv tactical emergency assistant. The user will state their location and situation. "
         "1. Use 'geocode_address' to find coordinates (street_name in Hebrew, house_number as string). "
         "2. Use 'find_shelters' to find the 3 closest safe locations. "
-        "3. Reply in short, tactical Hebrew: list the 3 shelters with distances only. "
-        "4. End with one very short, basic line only (e.g. 'לך למקלט הקרוב. הישאר בטוח.'). No long bullet lists or multiple הנחיות. Do not output raw JSON."
+        "3. Provide ONLY a short, tactical opening sentence (e.g., 'הנה המקלטים הקרובים ביותר אליך. הישאר בטוח.'). "
+        "CRITICAL: DO NOT output the list of shelters or their distances yourself. The UI will handle displaying the list. Do not output raw JSON."
     )
     prompt = ChatPromptTemplate.from_messages(
         [
@@ -449,15 +449,6 @@ if not os.path.exists("tlv_addresses.csv"):
     st.error("Address database missing: tlv_addresses.csv. Run get_addresses.py to generate it.")
     validation_ok = False
 df = load_shelters_data("tlv_shelters.csv") if os.path.exists("tlv_shelters.csv") else pd.DataFrame()
-
-# --- Emergency & System Info (below main title, above chat) ---
-with st.expander("Emergency & System Info", expanded=False):
-    st.markdown("<h4 style='text-align: center; color: #1d1d1f;'>Emergency Lines</h4>", unsafe_allow_html=True)
-    st.markdown(
-        "<p style='text-align: center; color: #515154;'>**104** – Home Front Command<br>**100** – Police<br>**101** – Ambulance</p>",
-        unsafe_allow_html=True,
-    )
-    st.info("**Why trust this app?** System operates with a fully offline geocoding fallback to bypass GPS spoofing and network crashes.")
 
 # --- Sidebar: About the Developer (recruiter exposure) ---
 with st.sidebar:
@@ -528,11 +519,11 @@ if "latest_map_data" in st.session_state:
     if user_lat is not None and user_lon is not None and shelters:
         col_text, col_map = st.columns([1, 1], gap="large")
         with col_text:
-            st.markdown("*Note: GPS might not be accurate due to signal blocking.*")
             for i, shelter in enumerate(shelters):
                 lat = shelter.get("lat")
                 lon = shelter.get("lon")
                 address = shelter.get("address") or shelter.get("t_ktovet") or "Unknown Address"
+                distance = shelter.get("distance_m", 0)
                 if address and address != "Unknown Address" and user_lat is not None and user_lon is not None:
                     destination_encoded = quote(f"{address}, Tel Aviv, Israel", safe="")
                     gmaps_url = f"https://www.google.com/maps/dir/?api=1&origin={user_lat},{user_lon}&destination={destination_encoded}&travelmode=walking"
@@ -540,7 +531,8 @@ if "latest_map_data" in st.session_state:
                     gmaps_url = f"https://www.google.com/maps/dir/?api=1&origin={user_lat},{user_lon}&destination={lat},{lon}&travelmode=walking"
                 else:
                     gmaps_url = "#"
-                st.markdown(f"**Option {i+1}:** {address} | [Open in Google Maps]({gmaps_url})")
+                st.markdown(f"**{address}** - {int(distance)} מ' | [Open in Google Maps]({gmaps_url})")
+            st.markdown("*Note: GPS might not be accurate due to signal blocking.*")
         with col_map:
             if isinstance(shelters, list) and len(shelters) > 0 and "lat" in shelters[0] and "lon" in shelters[0]:
                 map_obj = build_satellite_map(user_lat, user_lon, shelters)
@@ -564,6 +556,15 @@ with col_kpi2:
         "Official Municipality Data",
         "linear-gradient(135deg, #43E97B 0%, #38F9D7 100%)",
     )
+
+# --- Emergency & System Info (bottom of page, next to About the Developer) ---
+with st.expander("Emergency & System Info", expanded=False):
+    st.markdown("<h4 style='text-align: center; color: #1d1d1f;'>Emergency Lines</h4>", unsafe_allow_html=True)
+    st.markdown(
+        "<p style='text-align: center; color: #515154;'>**104** – Home Front Command<br>**100** – Police<br>**101** – Ambulance</p>",
+        unsafe_allow_html=True,
+    )
+    st.info("**Why trust this app?** System operates with a fully offline geocoding fallback to bypass GPS spoofing and network crashes.")
 
 # --- About the Developer (bottom of page, above footer) ---
 with st.expander("About the Developer", expanded=False):
