@@ -495,7 +495,7 @@ input_col, btn_col = st.columns([5, 1])
 with input_col:
     user_message = st.text_input(
         "Your location or question",
-        placeholder="e.g. אני בדיזנגוף 50 עם עגלת תינוק",
+        placeholder="e.g  אני בזידנגוף 50  ",
         key="chat_text_input",
         label_visibility="collapsed",
     )
