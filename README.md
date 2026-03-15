@@ -1,33 +1,37 @@
-# Tel Aviv Offline-First Tactical Shelter Locator
+# Tel Aviv Emergency Shelter Locator
 
-A production-grade GenAI data-engineering demo: a **LangChain tool-calling agent** that finds the three nearest emergency shelters from a user’s location. The app uses **local municipal CSVs** for offline geocoding and geodesic distance, so it works without external geocoding APIs and can bypass GPS spoofing via manual address entry. The UI is built with **Streamlit** and follows a clear separation between data, agent logic, and frontend.
+A web application that helps users find the closest emergency shelters in Tel Aviv. 
+
+This project uses a LangChain tool-calling agent to process natural language inputs (e.g., "I'm at 50 Dizengoff") or raw GPS coordinates. To ensure reliability during GPS spoofing or network instability, the application performs all geocoding and geodesic distance calculations locally using municipal datasets.
 
 ## Architecture
 
-- **Streamlit frontend (`app.py`)** — Page config, session state, chat UI, Folium map, expanders. No business or data logic.
-- **Data layer (`data_engine.py`)** — Pandas-based loading of `data/tlv_shelters.csv` and `data/tlv_addresses.csv`, offline address lookup with a smart fallback (closest house number on street), and geodesic distance to rank shelters. Optional Folium satellite map builder.
-- **Agent layer (`agent_logic.py`)** — LangChain tools `geocode_address` and `find_shelters`, system prompt, and cached `AgentExecutor`. The agent turns natural language (e.g. “אני בדיזנגוף 50” or raw lat/lon) into tool calls; the UI renders the list and map from tool results.
+The codebase is strictly modular, separating the frontend, AI logic, and data processing:
 
-Secrets (e.g. `OPENAI_API_KEY`) are read from the environment or Streamlit secrets only; nothing is hardcoded.
+* `app.py`: The Streamlit frontend. Handles the chat interface, session state, layout, and interactive Folium map rendering.
+* `agent_logic.py`: The LangChain agent setup. Defines the system prompt and the custom tools (`geocode_address` and `find_shelters`).
+* `data_engine.py`: The data layer. Uses Pandas to load local CSVs, perform offline address matching (with a mathematical fallback for approximate house numbers), and calculate routing distances.
 
-## Run locally
+## Local Setup
 
-1. **Clone and install**
-
+1. **Clone the repository**
    ```bash
-   git clone <repo-url>
-   cd ai-data-researcher
+   git clone [https://github.com/RotemEzra24/AI-data-researcher.git](https://github.com/RotemEzra24/AI-data-researcher.git)
+   cd AI-data-researcher
    pip install -r requirements.txt
-   ```
+
+
 
 2. **Data**
 
-   - Place municipal CSVs in the `data/` folder:
-     - `data/tlv_shelters.csv` — shelters with `lat`, `lon`, address, and optional size.
-     - `data/tlv_addresses.csv` — addresses for offline geocoding (e.g. `t_rechov`, `ms_bayit`, `Latitude`, `Longitude`).
-   - You can generate them (if you have the sources) with:
-     - `python get_shelters.py` → writes `data/tlv_shelters.csv`
-     - `python get_addresses.py` → writes `data/tlv_addresses.csv`
+ ##  Prepare the Data
+*The application requires Tel Aviv municipality datasets. Place the following files in a data/ folder in the root directory:
+
+*data/tlv_shelters.csv (contains latitude, longitude, and address)
+
+*data/tlv_addresses.csv (contains the municipal address grid)
+
+*Note: You can fetch the latest data using the provided scraping scripts (python get_shelters.py and python get_addresses.py).
 
 3. **Secrets**
 
@@ -49,16 +53,16 @@ Secrets (e.g. `OPENAI_API_KEY`) are read from the environment or Streamlit secre
 
 ```text
 .
-├── app.py              # Streamlit UI only
-├── agent_logic.py      # LangChain tools + AgentExecutor
-├── data_engine.py      # Data loading, geocoding, distance, map
-├── data/
+├── app.py              # Streamlit UI
+├── agent_logic.py      # LangChain tools and AgentExecutor
+├── data_engine.py      # Data loading, geocoding, and map logic
+├── data/               # Local CSV directory
 │   ├── tlv_shelters.csv
 │   └── tlv_addresses.csv
-├── get_shelters.py     # Script to fetch shelters into data/
-├── get_addresses.py    # Script to fetch addresses into data/
+├── get_shelters.py     # Script to fetch shelter data
+├── get_addresses.py    # Script to fetch address data
 ├── requirements.txt
-├── .env                # Not committed; add OPENAI_API_KEY
+├── .env                # Not committed
 └── README.md
 ```
 
