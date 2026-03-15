@@ -511,8 +511,10 @@ with loc_col_btn:
                 btn.textContent = 'Getting location...';
                 if (!navigator.geolocation) {
                     btn.textContent = 'Not supported';
+                    btn.disabled = false;
                     return;
                 }
+                var opts = { timeout: 15000, maximumAge: 60000 };
                 navigator.geolocation.getCurrentPosition(
                     function(pos) {
                         var w = window.top || window.parent || window;
@@ -521,10 +523,17 @@ with loc_col_btn:
                         url.searchParams.set('lon', pos.coords.longitude);
                         w.location.href = url.toString();
                     },
-                    function() {
-                        btn.textContent = 'Share location';
+                    function(err) {
                         btn.disabled = false;
-                    }
+                        if (err.code === 3) {
+                            btn.textContent = 'Timed out – try again or type address';
+                        } else if (err.code === 1) {
+                            btn.textContent = 'Location denied';
+                        } else {
+                            btn.textContent = 'Share location';
+                        }
+                    },
+                    opts
                 );
             };
         })();
