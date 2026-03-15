@@ -459,15 +459,6 @@ with st.expander("👨‍💻 About the Developer", expanded=False):
     with l2:
         st.markdown("<div style='text-align: center;'><a href='#' style='text-decoration: none; font-weight: 600;'>🐙 GitHub</a></div>", unsafe_allow_html=True)
 
-# --- Expander 2: Emergency & system trust (below developer) ---
-with st.expander("🛡️ מידע חירום ואמינות המערכת (Emergency & System Info)", expanded=False):
-    st.markdown("<h4 style='text-align: center; color: #1d1d1f;'>📞 מוקדי חירום (Emergency Lines)</h4>", unsafe_allow_html=True)
-    st.markdown(
-        "<p style='text-align: center; color: #515154;'>**104** – פיקוד העורף (Home Front Command)<br>**100** – משטרה (Police)<br>**101** – מד\"א (Ambulance)</p>",
-        unsafe_allow_html=True,
-    )
-    st.info("💡 **Why trust this app?** System operates with a fully offline geocoding fallback to bypass GPS spoofing and network crashes.")
-
 # --- Sidebar: About the Developer (recruiter exposure) ---
 with st.sidebar:
     st.markdown("## 👨‍💻 About the Developer")
@@ -480,17 +471,12 @@ with st.sidebar:
     st.markdown("[🔗 LinkedIn](#)")
     st.markdown("[🐙 GitHub](#)")
 
-# --- 4. Chat UI (directly below expanders) ---
+# --- 4. Chat UI: textbox first, then answer block below ---
 st.markdown("<p class='section-subtitle' style='margin-top: 1rem;'>Type your location below to find nearby shelters.</p>", unsafe_allow_html=True)
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Show only the latest exchange (last user + last assistant), not full history
-for msg in st.session_state.messages[-2:]:
-    with st.chat_message(msg["role"]):
-        st.write(msg["content"])
-
-# Always-visible text box + Send button (guarantees a visible input)
+# Text box + Send button at the top
 input_col, btn_col = st.columns([5, 1])
 with input_col:
     user_message = st.text_input(
@@ -502,6 +488,11 @@ with input_col:
 with btn_col:
     st.markdown("<br>", unsafe_allow_html=True)  # align with input
     send_clicked = st.button("Send", type="primary")
+
+# Answer block: show only the latest exchange below the textbox
+for msg in st.session_state.messages[-2:]:
+    with st.chat_message(msg["role"]):
+        st.write(msg["content"])
 
 # Accept input from either the text box (Send) or the native chat input
 prompt_input = user_message.strip() if (send_clicked and user_message) else st.chat_input("איפה אתה נמצא? (לדוגמה: אני בדיזנגוף 50 עם עגלת תינוק)")
@@ -573,7 +564,16 @@ with col_kpi2:
         "linear-gradient(135deg, #43E97B 0%, #38F9D7 100%)",
     )
 
-# --- 8. Connection status footer ---
+# --- Emergency & System Info at bottom of page ---
+with st.expander("🛡️ מידע חירום ואמינות המערכת (Emergency & System Info)", expanded=False):
+    st.markdown("<h4 style='text-align: center; color: #1d1d1f;'>📞 מוקדי חירום (Emergency Lines)</h4>", unsafe_allow_html=True)
+    st.markdown(
+        "<p style='text-align: center; color: #515154;'>**104** – פיקוד העורף (Home Front Command)<br>**100** – משטרה (Police)<br>**101** – מד\"א (Ambulance)</p>",
+        unsafe_allow_html=True,
+    )
+    st.info("💡 **Why trust this app?** System operates with a fully offline geocoding fallback to bypass GPS spoofing and network crashes.")
+
+# --- Connection status footer ---
 st.markdown(
     """
     <div style='text-align: center; color: #86868b; font-size: 12px; margin-top: 2rem;'>
