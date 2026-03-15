@@ -641,7 +641,7 @@ with col_kpi2:
 
 # --- Emergency & System Info (bottom of page, next to About the Developer) ---
 with st.expander("\U0001f6e1\ufe0f Emergency & System Info", expanded=False):
-    st.markdown("<h4 style='text-align: center; color: #1d1d1f; margin-bottom: 12px;'>Emergency Lines</h4>", unsafe_allow_html=True)
+    st.markdown("<h4 style='text-align: center; color: #86868b; margin-bottom: 12px;'>Emergency Lines</h4>", unsafe_allow_html=True)
     st.markdown(
         """
         <div style='display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 16px;'>
