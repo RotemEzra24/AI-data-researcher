@@ -493,12 +493,13 @@ loc_col_left, loc_col_btn = st.columns([5, 1])
 with loc_col_btn:
     st.markdown("<br>", unsafe_allow_html=True)
     share_location_html = """
-    <div id="share-loc-container">
+    <div id="share-loc-container" style="box-sizing: border-box; padding: 0; margin: 0;">
         <button type="button" id="share-loc-btn" style="
             background: linear-gradient(135deg, #0071e3 0%, #4facfe 100%);
-            color: white; border-radius: 980px; padding: 10px 24px;
-            font-weight: 600; border: none; font-size: 1rem; cursor: pointer;
-            width: 100%; max-width: 160px;
+            color: white; border-radius: 980px; padding: 6px 14px;
+            font-weight: 600; border: none; font-size: 13px; cursor: pointer;
+            width: 100%; max-width: 120px; white-space: nowrap;
+            line-height: 1.3; box-sizing: border-box; min-height: 32px;
         ">Share location</button>
     </div>
     <script>
@@ -529,7 +530,7 @@ with loc_col_btn:
         })();
     </script>
     """
-    components.html(share_location_html, height=50)
+    components.html(share_location_html, height=44)
 if loc and loc.get("latitude") is not None and loc.get("longitude") is not None:
     lat = loc["latitude"]
     lon = loc["longitude"]
