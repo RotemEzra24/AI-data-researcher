@@ -455,18 +455,6 @@ if not os.path.exists("tlv_addresses.csv"):
     validation_ok = False
 df = load_shelters_data("tlv_shelters.csv") if os.path.exists("tlv_shelters.csv") else pd.DataFrame()
 
-# --- Sidebar: About the Developer (recruiter exposure) ---
-with st.sidebar:
-    st.markdown("## 👨‍💻 About the Developer")
-    st.subheader("⚡ Data & AI for Emergency Response")
-    st.markdown(
-        "Built by Rotem, an Electrical Engineering student. This project merges "
-        "data engineering and AI to create a real-time, offline-capable tactical solution for the home front."
-    )
-    st.divider()
-    st.markdown("[🔗 LinkedIn](https://www.linkedin.com/in/rotem-ezra-24-07-97re/)")
-    st.markdown("[🐙 GitHub](#)")
-
 # --- 4. Chat UI: textbox first, then answer block below ---
 st.markdown("<p class='section-subtitle' style='margin-top: 1rem;'>Type your location below to find nearby shelters.</p>", unsafe_allow_html=True)
 if "messages" not in st.session_state:
