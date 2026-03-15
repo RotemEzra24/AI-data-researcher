@@ -411,10 +411,10 @@ def _create_agent_executor():
     tools = [geocode_address, find_shelters]
     system_msg = (
         "You are a Tel Aviv tactical emergency assistant. The user will state their location and situation. "
+        "Reply ONLY in English. Provide ONLY a short, tactical opening sentence in English. Example: 'Here are the closest shelters. Stay safe.' Do not use Hebrew. "
         "If the user provides exact latitude and longitude coordinates, SKIP the 'geocode_address' tool entirely and directly use the 'find_shelters' tool with those exact coordinates. "
         "Otherwise: 1. Use 'geocode_address' to find coordinates (street_name in Hebrew, house_number as string). "
         "2. Use 'find_shelters' to find the 3 closest safe locations. "
-        "3. Provide ONLY a short, tactical opening sentence (e.g., 'הנה המקלטים הקרובים ביותר אליך. הישאר בטוח.'). "
         "CRITICAL: DO NOT output the list of shelters or their distances yourself. The UI will handle displaying the list. Do not output raw JSON."
     )
     prompt = ChatPromptTemplate.from_messages(
@@ -480,8 +480,11 @@ for msg in st.session_state.messages[-2:]:
 
 # Geolocation: use device location (above chat input), only if package is available
 if streamlit_geolocation is not None:
-    st.markdown("<p style='text-align: center; color: #515154; font-size: 14px; margin-bottom: 5px; margin-top: 20px;'>או לחץ כאן כדי להשתמש במיקום הנוכחי שלך:</p>", unsafe_allow_html=True)
-    loc = streamlit_geolocation()
+    st.markdown("<br>", unsafe_allow_html=True)
+    col_left, col_center, col_right = st.columns([1, 2, 1])
+    with col_center:
+        st.markdown("<div style='text-align: center; margin-bottom: -15px;'><p style='color: #515154; font-size: 14px; font-weight: 500;'>Or use your live device location:</p></div>", unsafe_allow_html=True)
+        loc = streamlit_geolocation()
 else:
     loc = None
 if loc and loc.get("latitude") is not None and loc.get("longitude") is not None:
@@ -490,8 +493,8 @@ if loc and loc.get("latitude") is not None and loc.get("longitude") is not None:
     loc_str = f"{lat},{lon}"
     if "last_processed_loc" not in st.session_state or st.session_state.last_processed_loc != loc_str:
         st.session_state.last_processed_loc = loc_str
-        gps_prompt = f"המיקום המדויק שלי הוא קו רוחב {lat} וקו אורך {lon}. מצא לי מקלטים קרובים."
-        user_display = "משתמש במיקום GPS נוכחי..."
+        gps_prompt = f"My exact location is latitude {lat} and longitude {lon}. Find nearby shelters."
+        user_display = "Using current GPS location..."
         st.session_state.messages.append({"role": "user", "content": user_display})
         if validation_ok:
             chat_history = []
@@ -505,14 +508,14 @@ if loc and loc.get("latitude") is not None and loc.get("longitude") is not None:
                 result = agent_executor.invoke({"input": gps_prompt, "chat_history": chat_history})
                 reply = result.get("output", str(result))
             except Exception as e:
-                reply = f"שגיאה: {e}"
+                reply = f"Error: {e}"
         else:
             reply = "Cannot search: please add OPENAI_API_KEY to .env and ensure tlv_shelters.csv and tlv_addresses.csv exist."
         st.session_state.messages.append({"role": "assistant", "content": reply})
         st.rerun()
 
 # Accept input from either the text box (Send) or the native chat input
-prompt_input = user_message.strip() if (send_clicked and user_message) else st.chat_input("איפה אתה נמצא? (לדוגמה: אני בזידנגוף 50)")
+prompt_input = user_message.strip() if (send_clicked and user_message) else st.chat_input("Where are you? (e.g., 30 Ibn Gabirol with a wheelchair)")
 if prompt_input:
     st.session_state.messages.append({"role": "user", "content": prompt_input})
     if not validation_ok:
@@ -524,7 +527,7 @@ if prompt_input:
                 chat_history.append(HumanMessage(content=m["content"]))
             else:
                 chat_history.append(AIMessage(content=m["content"]))
-        with st.spinner("מחפש מחסות..."):
+        with st.spinner("Analyzing location and finding shelters..."):
             try:
                 agent_executor = _create_agent_executor()
                 result = agent_executor.invoke(
@@ -532,7 +535,7 @@ if prompt_input:
                 )
                 reply = result.get("output", str(result))
             except Exception as e:
-                reply = f"שגיאה: {e}"
+                reply = f"Error: {e}"
     st.session_state.messages.append({"role": "assistant", "content": reply})
     st.rerun()
 
@@ -584,10 +587,10 @@ with col_kpi2:
     )
 
 # --- Emergency & System Info (bottom of page, next to About the Developer) ---
-with st.expander("Emergency & System Info", expanded=False):
+with st.expander("\U0001f6e1\ufe0f Emergency & System Info", expanded=False):
     st.markdown("<h4 style='text-align: center; color: #1d1d1f;'>Emergency Lines</h4>", unsafe_allow_html=True)
     st.markdown(
-        "<p style='text-align: center; color: #515154;'>**104** – Home Front Command<br>**100** – Police<br>**101** – Ambulance</p>",
+        "<p style='text-align: center; color: #515154;'>**104** - Home Front Command<br>**100** - Police<br>**101** - Ambulance</p>",
         unsafe_allow_html=True,
     )
     st.info("**Why trust this app?** System operates with a fully offline geocoding fallback to bypass GPS spoofing and network crashes.")
