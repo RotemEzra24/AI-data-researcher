@@ -408,7 +408,8 @@ def _create_agent_executor():
         "You are a Tel Aviv tactical emergency assistant. The user will state their location and situation. "
         "1. Use 'geocode_address' to find coordinates (street_name in Hebrew, house_number as string). "
         "2. Use 'find_shelters' to find the 3 closest safe locations. "
-        "3. Reply to the user in short, tactical Hebrew with clear navigation instructions. Do not output raw JSON to the user."
+        "3. Reply in short, tactical Hebrew: list the 3 shelters with distances only. "
+        "4. End with one very short, basic line only (e.g. 'לך למקלט הקרוב. הישאר בטוח.'). No long bullet lists or multiple הנחיות. Do not output raw JSON."
     )
     prompt = ChatPromptTemplate.from_messages(
         [
@@ -484,7 +485,8 @@ st.markdown("<p class='section-subtitle' style='margin-top: 1rem;'>Type your loc
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-for msg in st.session_state.messages:
+# Show only the latest exchange (last user + last assistant), not full history
+for msg in st.session_state.messages[-2:]:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
