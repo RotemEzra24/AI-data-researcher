@@ -451,13 +451,11 @@ df = load_shelters_data("tlv_shelters.csv") if os.path.exists("tlv_shelters.csv"
 
 # --- Expander 1: About the Developer (below main header) ---
 with st.expander("👨‍💻 About the Developer", expanded=False):
-    st.markdown("<h4 style='text-align: center; color: #1d1d1f;'>👨‍💻 About the Developer</h4>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #515154;'>Built by Rotem, an Electrical Engineering student and GenAI Data Scientist. This project merges the operational mindset of a Nahal Brigade combat commander with advanced data engineering to create resilient tactical solutions for the home front.</p>", unsafe_allow_html=True)
-    l1, l2 = st.columns(2)
-    with l1:
-        st.markdown("<div style='text-align: center;'><a href='#' style='text-decoration: none; font-weight: 600;'>🔗 LinkedIn</a></div>", unsafe_allow_html=True)
-    with l2:
-        st.markdown("<div style='text-align: center;'><a href='#' style='text-decoration: none; font-weight: 600;'>🐙 GitHub</a></div>", unsafe_allow_html=True)
+    st.markdown("<h4 style='text-align: center; color: #1d1d1f; margin-bottom: 10px;'>👨‍💻 About the Developer</h4>", unsafe_allow_html=True)
+
+    st.markdown("<p style='text-align: center; color: #515154; font-size: 15px; line-height: 1.6; max-width: 600px; margin: 0 auto;'>Hey, I'm Rotem. I'm a GenAI Data Scientist and an Electrical Engineering student. I built this offline-first shelter locator to provide a fast, reliable tool for emergencies when internet or GPS might fail. Combining my tech background with my operational experience as a former IDF combat commander, my goal is to build practical, data-driven tools that actually help people when it matters most.</p>", unsafe_allow_html=True)
+
+    st.markdown("<div style='text-align: center; margin-top: 20px; margin-bottom: 10px;'><a href='https://www.linkedin.com/in/YOUR_LINKEDIN_PROFILE' target='_blank' style='text-decoration: none; font-weight: 500; background-color: #0a66c2; color: white; padding: 8px 20px; border-radius: 20px; font-size: 14px;'>🔗 Let's connect on LinkedIn</a></div>", unsafe_allow_html=True)
 
 # --- Sidebar: About the Developer (recruiter exposure) ---
 with st.sidebar:
